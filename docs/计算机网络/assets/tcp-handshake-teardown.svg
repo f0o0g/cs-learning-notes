@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1030">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');
+    text { font-family: 'JetBrains Mono', 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif; }
+    .title { fill:#f8fafc; font-size:26px; font-weight:700; }
+    .subtitle { fill:#94a3b8; font-size:13px; }
+    .panel-title { fill:#f8fafc; font-size:18px; font-weight:700; }
+    .actor { fill:#f8fafc; font-size:14px; font-weight:600; }
+    .actor-sub { fill:#94a3b8; font-size:10px; }
+    .message { fill:#e2e8f0; font-size:13px; font-weight:600; }
+    .detail { fill:#94a3b8; font-size:10px; }
+    .state { fill:#cbd5e1; font-size:10px; font-weight:600; }
+    .note-title { fill:#f8fafc; font-size:12px; font-weight:700; }
+    .note { fill:#cbd5e1; font-size:10px; }
+    .badge { fill:#0f172a; font-size:9px; font-weight:700; text-anchor:middle; }
+  </style>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#fb7185"/>
+    </marker>
+    <marker id="arrow-time" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1480" height="1030" fill="#0f172a"/>
+  <rect width="1480" height="1030" fill="url(#grid)"/>
+
+  <text x="42" y="45" class="title">TCP 连接生命周期：三次握手与四次挥手</text>
+  <text x="42" y="70" class="subtitle">时间自上而下 · SYN/FIN 各占用 1 个序列号 · 纯 ACK 不占用序列号</text>
+
+  <!-- Panels -->
+  <rect x="32" y="96" width="688" height="900" rx="16" fill="rgba(8,51,68,0.16)" stroke="#22d3ee" stroke-width="1.2"/>
+  <rect x="744" y="96" width="704" height="900" rx="16" fill="rgba(120,53,15,0.12)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="56" y="130" class="panel-title">A. 三次握手｜建立连接</text>
+  <text x="768" y="130" class="panel-title">B. 四次挥手｜终止连接</text>
+
+  <!-- Handshake actors and lifelines -->
+  <rect x="100" y="154" width="190" height="58" rx="8" fill="#0f172a"/>
+  <rect x="100" y="154" width="190" height="58" rx="8" fill="rgba(8,51,68,0.45)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="195" y="179" class="actor" text-anchor="middle">客户端</text>
+  <text x="195" y="197" class="actor-sub" text-anchor="middle">主动打开 · CLOSED</text>
+
+  <rect x="470" y="154" width="190" height="58" rx="8" fill="#0f172a"/>
+  <rect x="470" y="154" width="190" height="58" rx="8" fill="rgba(6,78,59,0.45)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="565" y="179" class="actor" text-anchor="middle">服务端</text>
+  <text x="565" y="197" class="actor-sub" text-anchor="middle">被动打开 · LISTEN</text>
+
+  <line x1="195" y1="212" x2="195" y2="708" stroke="#334155" stroke-width="1.2" stroke-dasharray="7,5"/>
+  <line x1="565" y1="212" x2="565" y2="708" stroke="#334155" stroke-width="1.2" stroke-dasharray="7,5"/>
+  <line x1="72" y1="236" x2="72" y2="650" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrow-time)"/>
+  <text x="64" y="448" fill="#64748b" font-size="10" text-anchor="middle" transform="rotate(-90 64 448)">时间</text>
+
+  <!-- Handshake step 1 -->
+  <circle cx="181" cy="275" r="13" fill="#22d3ee"/>
+  <text x="181" y="279" class="badge">1</text>
+  <line x1="195" y1="275" x2="565" y2="275" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <text x="380" y="252" class="message" text-anchor="middle">SYN=1, seq=x</text>
+  <text x="380" y="294" class="detail" text-anchor="middle">同步客户端 ISN；SYN 占用序列号 x</text>
+  <rect x="105" y="315" width="180" height="28" rx="14" fill="rgba(59,130,246,0.24)" stroke="#60a5fa"/>
+  <text x="195" y="333" class="state" text-anchor="middle">CLOSED → SYN-SENT</text>
+
+  <!-- Handshake step 2 -->
+  <circle cx="579" cy="382" r="13" fill="#34d399"/>
+  <text x="579" y="386" class="badge">2</text>
+  <line x1="565" y1="382" x2="195" y2="382" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <text x="380" y="359" class="message" text-anchor="middle">SYN=1, ACK=1</text>
+  <text x="380" y="401" class="detail" text-anchor="middle">seq=y, ack=x+1</text>
+  <rect x="475" y="422" width="180" height="28" rx="14" fill="rgba(6,78,59,0.32)" stroke="#34d399"/>
+  <text x="565" y="440" class="state" text-anchor="middle">LISTEN → SYN-RECEIVED</text>
+
+  <!-- Handshake step 3 -->
+  <circle cx="181" cy="489" r="13" fill="#22d3ee"/>
+  <text x="181" y="493" class="badge">3</text>
+  <line x1="195" y1="489" x2="565" y2="489" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <text x="380" y="466" class="message" text-anchor="middle">ACK=1</text>
+  <text x="380" y="508" class="detail" text-anchor="middle">seq=x+1, ack=y+1</text>
+  <rect x="105" y="529" width="180" height="28" rx="14" fill="rgba(59,130,246,0.24)" stroke="#60a5fa"/>
+  <text x="195" y="547" class="state" text-anchor="middle">→ ESTABLISHED</text>
+  <rect x="475" y="529" width="180" height="28" rx="14" fill="rgba(6,78,59,0.32)" stroke="#34d399"/>
+  <text x="565" y="547" class="state" text-anchor="middle">→ ESTABLISHED</text>
+
+  <rect x="82" y="594" width="576" height="96" rx="10" fill="#0f172a"/>
+  <rect x="82" y="594" width="576" height="96" rx="10" fill="rgba(76,29,149,0.26)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="102" y="620" class="note-title">为什么不能只握手两次？</text>
+  <text x="102" y="644" class="note">最终 ACK 让服务端确认：客户端确实收到了服务端的 ISN 与确认信息。</text>
+  <text x="102" y="664" class="note">旧 SYN 到达时，服务端只停留在 SYN-RECEIVED；无对应连接的客户端通常回复 RST。</text>
+
+  <rect x="82" y="724" width="576" height="116" rx="10" fill="#0f172a"/>
+  <rect x="82" y="724" width="576" height="116" rx="10" fill="rgba(8,51,68,0.28)" stroke="#22d3ee" stroke-width="1.2"/>
+  <text x="102" y="750" class="note-title">为什么典型流程不是四次？</text>
+  <text x="102" y="774" class="note">服务端的“确认客户端 SYN”和“发送自身 SYN”可以同时完成：</text>
+  <text x="102" y="796" fill="#22d3ee" font-size="12" font-weight="700">SYN + ACK → 一个 TCP 报文段</text>
+  <text x="102" y="820" class="note">这是 TCP 传输层首部机制，与“物理层面”无关。</text>
+
+  <!-- Teardown actors and lifelines -->
+  <rect x="814" y="154" width="210" height="58" rx="8" fill="#0f172a"/>
+  <rect x="814" y="154" width="210" height="58" rx="8" fill="rgba(120,53,15,0.34)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="919" y="179" class="actor" text-anchor="middle">主动关闭方</text>
+  <text x="919" y="197" class="actor-sub" text-anchor="middle">ESTABLISHED</text>
+
+  <rect x="1168" y="154" width="210" height="58" rx="8" fill="#0f172a"/>
+  <rect x="1168" y="154" width="210" height="58" rx="8" fill="rgba(136,19,55,0.32)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="1273" y="179" class="actor" text-anchor="middle">被动关闭方</text>
+  <text x="1273" y="197" class="actor-sub" text-anchor="middle">ESTABLISHED</text>
+
+  <line x1="919" y1="212" x2="919" y2="760" stroke="#334155" stroke-width="1.2" stroke-dasharray="7,5"/>
+  <line x1="1273" y1="212" x2="1273" y2="760" stroke="#334155" stroke-width="1.2" stroke-dasharray="7,5"/>
+  <line x1="780" y1="236" x2="780" y2="706" stroke="#64748b" stroke-width="1.2" marker-end="url(#arrow-time)"/>
+  <text x="772" y="474" fill="#64748b" font-size="10" text-anchor="middle" transform="rotate(-90 772 474)">时间</text>
+
+  <!-- Teardown 1 -->
+  <circle cx="905" cy="266" r="13" fill="#fbbf24"/>
+  <text x="905" y="270" class="badge">1</text>
+  <line x1="919" y1="266" x2="1273" y2="266" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <text x="1096" y="243" class="message" text-anchor="middle">FIN=1, seq=u</text>
+  <text x="1096" y="285" class="detail" text-anchor="middle">关闭主动方 → 被动方的数据流</text>
+  <rect x="829" y="305" width="180" height="28" rx="14" fill="rgba(120,53,15,0.3)" stroke="#fbbf24"/>
+  <text x="919" y="323" class="state" text-anchor="middle">→ FIN-WAIT-1</text>
+
+  <!-- Teardown 2 -->
+  <circle cx="1287" cy="373" r="13" fill="#fb7185"/>
+  <text x="1287" y="377" class="badge">2</text>
+  <line x1="1273" y1="373" x2="919" y2="373" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+  <text x="1096" y="350" class="message" text-anchor="middle">ACK=1, ack=u+1</text>
+  <text x="1096" y="392" class="detail" text-anchor="middle">确认 FIN；反方向仍可继续发送数据</text>
+  <rect x="829" y="411" width="180" height="28" rx="14" fill="rgba(120,53,15,0.3)" stroke="#fbbf24"/>
+  <text x="919" y="429" class="state" text-anchor="middle">→ FIN-WAIT-2</text>
+  <rect x="1183" y="411" width="180" height="28" rx="14" fill="rgba(136,19,55,0.26)" stroke="#fb7185"/>
+  <text x="1273" y="429" class="state" text-anchor="middle">→ CLOSE-WAIT</text>
+
+  <!-- Remaining data band -->
+  <rect x="963" y="459" width="266" height="44" rx="8" fill="rgba(30,41,59,0.72)" stroke="#64748b" stroke-dasharray="5,4"/>
+  <text x="1096" y="477" class="detail" text-anchor="middle">被动方可发送剩余数据</text>
+  <text x="1096" y="493" class="detail" text-anchor="middle">等待本方应用调用 close()</text>
+
+  <!-- Teardown 3 -->
+  <circle cx="1287" cy="543" r="13" fill="#fb7185"/>
+  <text x="1287" y="547" class="badge">3</text>
+  <line x1="1273" y1="543" x2="919" y2="543" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+  <text x="1096" y="520" class="message" text-anchor="middle">FIN=1, seq=v</text>
+  <text x="1096" y="562" class="detail" text-anchor="middle">被动方也完成发送</text>
+  <rect x="1183" y="581" width="180" height="28" rx="14" fill="rgba(136,19,55,0.26)" stroke="#fb7185"/>
+  <text x="1273" y="599" class="state" text-anchor="middle">→ LAST-ACK</text>
+
+  <!-- Teardown 4 -->
+  <circle cx="905" cy="649" r="13" fill="#fbbf24"/>
+  <text x="905" y="653" class="badge">4</text>
+  <line x1="919" y1="649" x2="1273" y2="649" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <text x="1096" y="626" class="message" text-anchor="middle">ACK=1, ack=v+1</text>
+  <text x="1096" y="668" class="detail" text-anchor="middle">确认对方 FIN</text>
+  <rect x="829" y="688" width="180" height="28" rx="14" fill="rgba(120,53,15,0.3)" stroke="#fbbf24"/>
+  <text x="919" y="706" class="state" text-anchor="middle">→ TIME-WAIT</text>
+  <rect x="1183" y="688" width="180" height="28" rx="14" fill="rgba(136,19,55,0.26)" stroke="#fb7185"/>
+  <text x="1273" y="706" class="state" text-anchor="middle">→ CLOSED</text>
+
+  <rect x="794" y="750" width="604" height="106" rx="10" fill="#0f172a"/>
+  <rect x="794" y="750" width="604" height="106" rx="10" fill="rgba(120,53,15,0.22)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="814" y="776" class="note-title">TIME-WAIT 为什么等待 2MSL？</text>
+  <text x="814" y="800" class="note">① 最终 ACK 丢失时，仍能响应对方重传的 FIN</text>
+  <text x="814" y="822" class="note">② 让旧连接的延迟报文在网络中自然消失</text>
+  <text x="814" y="844" fill="#fbbf24" font-size="10" font-weight="600">2MSL 到期：主动关闭方 → CLOSED</text>
+
+  <rect x="794" y="878" width="604" height="86" rx="10" fill="#0f172a"/>
+  <rect x="794" y="878" width="604" height="86" rx="10" fill="rgba(76,29,149,0.24)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="814" y="904" class="note-title">为何常见四次，但抓包有时只有三段？</text>
+  <text x="814" y="928" class="note">两个方向独立关闭，ACK 与本方 FIN 通常分开发送；若被动方已准备关闭，</text>
+  <text x="814" y="948" class="note">第二次 ACK 与第三次 FIN 可以合并为一个 FIN+ACK 报文段。</text>
+
+  <!-- Footer legend -->
+  <circle cx="92" cy="930" r="6" fill="#22d3ee"/>
+  <text x="108" y="934" class="detail">建立连接</text>
+  <circle cx="202" cy="930" r="6" fill="#fbbf24"/>
+  <text x="218" y="934" class="detail">主动关闭方</text>
+  <circle cx="340" cy="930" r="6" fill="#fb7185"/>
+  <text x="356" y="934" class="detail">被动关闭方</text>
+  <text x="82" y="966" class="detail">注：状态路径展示的是“主动打开 + 单方主动关闭”的典型情况；同时打开/关闭会出现其他状态。</text>
+</svg>

@@ -1,0 +1,28 @@
+# Only published Markdown and image assets belong in this repository.
+*
+!*/
+!*.md
+!*.png
+!*.jpg
+!*.jpeg
+!*.svg
+!*.gif
+!*.webp
+!.gitignore
+
+# Working materials and tooling remain in the parent workspace.
+**/.*/
+**/node_modules/
+**/__pycache__/
+**/tmp/
+**/temp/
+**/build/
+**/dist/
+**/Debug/
+**/Release/
+**/x64/
+**/备份/
+**/历史版本/
+**/语音转文字/
+**/录音转文字/
+**/prompts/
