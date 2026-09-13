@@ -513,7 +513,7 @@ qDebug()<<"qstr:"<<qstr;
 // 输出：qstr: qwer 44  o9
 ```
 
-+ **<font style="color:#df2a3f;">关键词</font>**<font style="color:#df2a3f;">：</font>`<font style="color:#df2a3f;">arg()</font>`<font style="color:#df2a3f;"> 占位符解析规则——</font>`<font style="color:#df2a3f;">%</font>`<font style="color:#df2a3f;"> 后最多识别两位数字</font>
++ **关键词：** `arg()` **占位符解析规则——** `%` **后最多识别两位数字**
 + **占位符范围**：`QString::arg()` 使用 `%1` 到 `%99` 形式的占位符，编号不要求从 `%1` 开始或连续出现。
 + **解析过程**：
     - `arg()` 从 `%` 开始向后扫描，最多取两位数字作为占位符编号。
