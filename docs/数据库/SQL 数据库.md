@@ -717,6 +717,16 @@ select * from SC where score is null;
 select * from SC where score = null;
 ```
 
+**不等于（`<>`）会“漏掉” null 行**：由于 `null <> 任何值` 的结果是 `null` 而非 True，用不等于筛选时，**该列为 null 的行不会出现在结果中**（既不算“符合”也不算“不符合”，而是直接被过滤掉）：
+```sql
+-- 查询成绩不等于 90 的记录
+select * from SC where score <> 90;
+-- 结果不包含 score 为 null 的行：null <> 90 得到 null（非 True），被 where 过滤掉
+
+-- 若想把 null 行也一并返回，需显式补上 is null 条件
+select * from SC where score <> 90 or score is null;
+```
+
 ### 4.2.2 逻辑运算符
 | 运算符 | 含义 | 说明 |
 | :--- | :--- | :--- |
