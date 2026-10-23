@@ -2306,7 +2306,7 @@ nact.sa_handler = SIG_DFL;      // 三选一：SIG_DFL 默认行为 / SIG_IGN �
 nact.sa_flags = 0;              // 默认选项
 sigemptyset(&nact.sa_mask);     // 临时屏蔽字，初始化即可
 
-sigaction(SIGINT, &nact, &oact);
+sigaction(SIGINT, &nact, &oact); // SIGINT：Ctrl+C 触发的 2 号信号；把它的行为换成 nact，原有行为存入 oact
 while (1);                      // 必须写死循环测试，否则进程直接结束看不出效果
 ```
 
@@ -2329,6 +2329,17 @@ void sig_do(int signo)    // 返回值空、参数固定 int（系统传入当�
 
 - 捕捉函数由用户**声明和实现**，但**不是用户调用的**——信号递达（条件满足）时**系统自动调用**；
 - 参数 `signo` 由系统传：捕捉的是 2 号信号，进来就是 2；捕捉 3 号就是 3——打印它就能看到是哪个信号触发的。
+
+**sigaction 函数本身**：
+
+```c
+int sigaction(int signo, const struct sigaction *act, struct sigaction *oldact);
+```
+
+- 作用：**修改（或查询）指定信号的行为**——`act` 传入新行为，`oldact` 带出原有行为，传 `NULL` 表示不关心那一侧；
+- 返回值：成功返回 **0**，失败返回 **-1** 并设置 `errno`。
+
+**SIGINT 是什么**：名字拆开是 `SIG`（signal）+ `INT`（interrupt）—— 2 号"中断信号"。终端里按 **Ctrl+C** 时由线路规程生成并发给前台进程；它的默认行为是 **term（终止进程）**，这正是平时 Ctrl+C 能直接杀掉程序的原因。
 
 **sigaction 的三个参数**：
 
@@ -2365,13 +2376,445 @@ int main()
 
 编译运行后按 **Ctrl+C**：不再被杀掉，而是打印 `2 signal`——信号被捕捉，进程继续跑。
 
+**为什么按 Ctrl+C 能触发 `sig_do`？** 整条链路分四步：
+
+```
+Ctrl+C 按键
+   ↓ 终端线路规程拦截识别（功能键，不进输入缓冲区）
+向前台进程发送 2 号信号 SIGINT
+   ↓ 进程 PCB 中 SIGINT 的行为已被 sigaction 改写
+行为 = 捕捉，捕捉函数地址 = sig_do
+   ↓ 信号递达，系统自动调用
+sig_do(2) → 打印 "2 signal" → 返回，回到 while(1) 继续空转
+```
+
+- **信号源**：Ctrl+C 本身只是一个按键，由**终端线路规程**翻译成 SIGINT，发给当前的**前台进程**——所以程序必须在前台运行，后台进程按 Ctrl+C 不会有任何反应；
+- **行为改写**：`sigaction(SIGINT, &nact, &oact)` 已把该进程 SIGINT 的行为从默认的 term（直接终止）改成**捕捉**，`sa_handler = sig_do` 等于告诉系统"这个信号来了就调用 `sig_do`"；
+- **是系统调用，不是用户调用**：`while(1);` 里没有任何一句代码调用 `sig_do`，是内核在信号递达时打断执行流、跳进捕捉函数，返回后再接着执行被打断的位置——所以进程不会死，死循环会一直转下去；
+- **按几次打印几次**：每按一次 Ctrl+C 产生一个 SIGINT 信号，就触发一次 `sig_do`，每触发一次打印一行 `2 signal`。
+
 测试建议：
 
 - 三种行为都要试一遍：默认（SIG_DFL，Ctrl+C 照常被杀）、忽略（SIG_IGN，Ctrl+C 无反应）、捕捉（打印编号后继续运行）；
 - 捕捉测 2 号信号最方便——Ctrl+C 随时可触发；
 - **忽略与捕捉都能让信号失效**（捕捉函数写空，则信号"来了跟没来一样"）。
 
-### 10.6 五种触发方式速查
+### 10.6 信号的传递过程：两个信号集
+
+信号抵达进程后**不是立即处理**，而是先记录在进程的 PCB 中，经过两道"门"的检查后才进入处理流程。PCB 中有**两个信号集**（signal set），都是位图：每一位对应一个信号（1~64），位码只有 0 和 1。位码相当于一扇门：**0 表示开门、允许信号通过；1 表示关门、不允许通过**。
+
+```
+                         ┌──────────── PCB ────────────┐
+信号（如 2 号）─────────→│  未决信号集（系统维护）       │
+                         │  对应位 0→通过，1→丢弃       │
+                         │  通过后：位翻为 1（未决态）    │
+                         └────────────┬────────────────┘
+                                      ↓
+                         ┌──────────── 屏蔽字 ──────────┐
+                         │  阻塞信号集（用户可设置）      │
+                         │  对应位 0→通过，1→阻塞        │
+                         └────────────┬────────────────┘
+                                      ↓ 通过后未决位由 1 翻回 0
+                               信号处理流程
+                           （默认 / 忽略 / 捕捉行为选择）
+```
+
+**第一道：未决信号集**
+
+- 信号尝试通过未决信号集：对应位为 **1** → 信号**直接丢弃**，系统不做处理；对应位为 **0** → 信号通过，进入"**未决态**"；
+- 系统把未决信号集中该信号对应位**翻为 1**——标记"当前有一个未决信号"；当信号通过屏蔽字进入处理流程后，该位再**翻回 0**；
+- **未决信号集由系统自动维护，用户无法修改**，只能查看；
+- 由于"未决位为 1 时，同一信号的再次抵达会被直接丢弃"，所以 **UNIX 经典信号不支持排队**。
+
+**第二道：屏蔽字（阻塞信号集）**
+
+- 对应位为 **0** → 信号通过、进入后续处理流程（抵达态）；
+- 对应位为 **1** → 信号**陷入屏蔽（阻塞）**，卡在两个信号集之间，无法递达、无法处理——这就是"信号屏蔽/信号阻塞"；
+- **屏蔽字可以由用户自行设置**，决定要阻塞哪些信号。
+
+**通过两道门之后**，信号进入处理流程做**行为选择**：默认行为（五种默认动作处置进程）、忽略行为或捕捉行为——即 10.4、10.5 的内容。
+
+> 补充：前 31 个经典信号主要面向软件研发（处置进程：终止、挂起、异常处理）；34~64 的自定义（实时）信号主要面向驱动开发——例如光盘驱动器，把"上一首/下一首"功能分别绑定到不同信号上，用户每按一次键就触发一次信号。
+
+**为什么经典信号不排队、而实时信号排队？**
+
+- 经典信号的设计初衷是**处置进程**：一个信号就足以杀死进程；杀不死的话再发多次也没用；若信号已被忽略/捕捉（失效），发再多次也同样无效——不需要排队；
+- 实时信号绑定的是**功能**：连续按 5 次"下一首"，用户期望跳 5 首，需要把 5 次触发都记录下来逐次处理——所以**实时信号有排队队列**，连续触发多次会依次排队、逐个传递处理。
+
+### 10.7 信号屏蔽：信号集与 sigprocmask
+
+**原理**：每个进程默认自带屏蔽字（所有位为 0）；开发者自定义一个新的信号集，把要屏蔽的信号位置 1，再**替换**进程原有的屏蔽字——与修改信号行为结构体的思路一致：进程原来有一个，自己准备一个，设置好后替换掉。
+
+**信号集类型与操作函数**：“sigset_t”是信号集类型——无论是未决信号集还是屏蔽字，都是这个类型（位图，每一位对应一个信号）。
+
+| 函数 | 原型（要点） | 说明 |
+|---|---|---|
+| `sigemptyset` | `int sigemptyset(sigset_t *nset);` | 初始化，将 nset 中所有位初始化为 0 |
+| `sigfillset` | `int sigfillset(sigset_t *nset);` | 初始化，将 nset 中所有位初始化为 1 |
+| `sigaddset` | `int sigaddset(sigset_t *nset, int signo);` | 设置函数，将 nset 中 signo 信号位设置为 1 |
+| `sigdelset` | `int sigdelset(sigset_t *nset, int signo);` | 设置函数，将 nset 中 signo 信号位设置为 0 |
+| `sigismember` | `int sigismember(sigset_t *nset, int signo);` | 获取/查看 nset 中 signo 信号位的位码并返回（0 或 1） |
+
+**替换函数 sigprocmask**：
+
+```c
+sigprocmask(SIG_SETMASK, &nset, &oset);
+```
+
+- 第一个参数：替换方式，`SIG_SETMASK` 表示直接用 nset **覆盖替换**进程原有信号集（最简单）；
+- 第二个参数：新的信号集地址；
+- 第三个参数：传出进程原有信号集（保存在 oset 中，可省略传 NULL）。
+
+**注意**：以上所有操作修改的都是**屏蔽字（阻塞信号集）**，不是未决信号集。
+
+`sigset.c`——屏蔽 2 号信号（Ctrl+C）：
+
+```c
+#include<stdio.h>
+#include<signal.h>
+#include<stdlib.h>
+#include<unistd.h>
+
+int main(void)
+{
+	sigset_t nset,oset;                     // nset：自定义屏蔽字；oset：保存进程原有的屏蔽字
+	sigemptyset(&nset);                     // 初始化信号集：31 位全部清零，默认谁都不屏蔽
+
+	sigaddset(&nset,SIGINT);                // 把 2 号信号（Ctrl+C 的 SIGINT）对应位置 1：准备屏蔽它
+
+	sigprocmask(SIG_SETMASK,&nset,&oset);   // 用 nset 覆盖进程原屏蔽字：SIGINT 卡在两道门之间，无法递达
+	while(1)                                // 死循环让进程一直活着，方便反复按 Ctrl+C 验证屏蔽效果
+		sleep(1);                          // 睡眠等待信号，每秒醒来一次
+
+	return 0;
+}
+```
+
+编译运行 `gcc sigset.c -o app`、`./app` 后，按 Ctrl+C 进程不再退出——2 号信号被屏蔽、卡在两个信号集之间；连续按多次也一样（同一信号再次抵达时被未决信号集直接丢弃）。若要同时屏蔽 Ctrl+\（3 号信号），再增加一行 `sigaddset(&nset, SIGQUIT);` 即可。
+
+### 10.8 查看未决信号：sigpending
+
+想看"信号已经来了、并且被屏蔽卡住"的状态，要看**未决信号集**而不是屏蔽字：
+
+- **屏蔽字是静态的**：它是事先设好的"要屏蔽谁"的清单，设置之后不再变化；
+- **未决信号集是动态的**：信号未抵达时为 0，抵达并被卡住后由系统置为 1——所以"实时是否被阻塞"要看它。
+
+`sigpending(sigset_t *pset);`：获取当前进程的未决信号集，传出到 pset 中。
+
+`sigpending.c`——每秒打印一次 31 位未决信号集：
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<signal.h>
+#include<string.h>
+
+void print_pset(sigset_t pset)
+{
+	int signo = 1;
+	for(signo;signo<32;signo++)                 // 逐个检查 1~31 号经典信号
+	{
+		if(sigismember(&pset,signo))            // 位码为 1 → 该信号已产生、被屏蔽卡住（未决）
+			putchar('1');
+		else                                    // 位码为 0 → 该信号当前不存在
+			putchar('0');
+	}
+	putchar('\n');                              // 31 位打印完，换行
+}
+
+int main()
+{
+	sigset_t nset,oset;
+	sigemptyset(&nset);
+	sigaddset(&nset,SIGINT);                    // 屏蔽 2 号信号，让它只能停在未决态
+	sigprocmask(SIG_SETMASK,&nset,&oset);       // 用 nset 覆盖进程原屏蔽字
+
+	sigset_t pset;
+	while(1)
+	{
+		sigpending(&pset);                  // 取出当前进程的未决信号集
+		print_pset(pset);                   // 打印 31 位位码：0 无未决、1 有未决
+		sleep(1);                           // 每秒刷新一次，观察按 Ctrl+C 前后的变化
+	}
+
+	return 0;	
+}
+```
+
+运行现象：
+
+- 启动后每秒输出一行 **31 个 0**（当前没有未决信号）；
+- 按一次 **Ctrl+C**（2 号信号被屏蔽）：输出变为第 2 位是 **1**（第 1 个字符对应 1 号信号，第 2 个字符就是 2 号信号）；
+- 若代码中同时 `sigaddset(&nset, SIGQUIT);` 屏蔽 3 号信号，再按 **Ctrl+\**，输出变为 `0110…`。
+
+### 10.9 三种让信号失效的方式与高权信号
+
+到目前已经学了三种让信号失效的方式，区别在于**信号有没有递达**：
+
+| 方式 | 做法 | 信号是否递达 | 效果 |
+|---|---|---|---|
+| 信号忽略 | 修改信号行为为 `SIG_IGN` | 已递达 | 信号被送达进程，但处理动作为空（NULL），进程不处置 |
+| 信号捕捉 | 自定义信号行为（捕捉函数） | 已递达 | 信号被送达，由自定义动作"消化" |
+| 信号屏蔽 | 修改进程屏蔽字 | **未递达**（阻塞在屏蔽字之间） | 临时失效——信号没有消失，解除屏蔽后仍按默认动作处置进程（杀死/挂起） |
+
+**高权信号**：如果所有信号都能被屏蔽、忽略、捕捉，系统还安全吗？系统提供 2 个无法被屏蔽、忽略、捕捉的信号：
+
+| 信号 | 编号 | 作用 |
+|---|---|---|
+| `SIGKILL` | 9 号 | 杀死进程（`kill -9`） |
+| `SIGSTOP` | 19 号 | 挂起进程 |
+
+**屏蔽的权限边界**：屏蔽信号还要考虑**发出者权限与进程权限**：
+
+- 用户进程主动用 `kill -11 <pid>` 发送 11 号信号：可以被屏蔽，进程不会死；
+- 但**硬件异常**（段错误）产生的 11 号信号由系统内核直接产生，权限高于用户进程——屏蔽/忽略/捕捉都无效，进程依然被杀死（输出"段错误（核心已转储）"）。
+
+演示对比一——屏蔽 11 号信号，手动 kill -11 无效：
+
+```c
+// 此代码屏蔽 11 号信号 SIGSEGV（段错误信号）
+int main(void)
+{
+	sigset_t nset, oset;
+	sigemptyset(&nset);
+	sigaddset(&nset, SIGSEGV);
+	sigprocmask(SIG_SETMASK, &nset, &oset);   // 实现屏蔽段错误信号
+	while(1)
+		sleep(1);
+}
+// gcc test.c -o app
+// ./app（pid 3000）
+// kill -11 3000;   // 可以成功屏蔽信号，11 号信号无法杀死进程
+```
+
+演示对比二——同样的屏蔽，无法屏蔽系统产生的硬件异常信号：
+
+```c
+int main(void){
+	char *str = "9890890809123123";
+	sigset_t nset, oset;
+	sigemptyset(&nset);
+	sigaddset(&nset, SIGSEGV);
+	sigprocmask(SIG_SETMASK, &nset, &oset);   // 实现屏蔽段错误信号
+	str[0] = 'A';   // 非法操作内存：系统检测到硬件异常，向进程发送 11 号 SIGSEGV 信号，进程被杀死，抛出段错误（核心已转储）
+	printf("str %s\n", str);
+}
+```
+
+### 10.10 用信号回收僵尸进程：SIGCHLD
+
+第 4 章的回收方式（wait/waitpid 轮询）都是**主动回收**——父进程要自己盯着子进程；用信号可以改成**被动回收**：
+
+- 僵尸进程只有父进程能回收；
+- 子进程退出时，**系统给其父进程发送一个 `SIGCHLD` 信号**；
+- 父进程用 sigaction 对 SIGCHLD 设置捕捉：信号递达时系统自动调用捕捉函数，在捕捉函数里完成回收——父进程平时可以安心做自己的事，不用轮询。
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <signal.h>
+
+void sig_wait(int n)                     // SIGCHLD 的捕捉函数：把已退出的子进程全部回收
+{
+	pid_t zpid;
+	// SIGCHLD 属于经典信号，不支持排队：大量信号同时递达会丢弃，只回收一次会漏回收、残留僵尸
+	while ((zpid = waitpid(-1, NULL, WNOHANG)) > 0)   // 循环回收，不会漏
+	{
+		printf("parent wait child sucessly , zpid %d\n", zpid);
+	}
+}
+
+int main(void)
+{
+	pid_t pid;
+	int i;
+	// 父进程创建子进程之前完成信号捕捉设定
+	struct sigaction act, oact;
+	act.sa_handler = sig_wait;              // 捕捉函数地址：SIGCHLD 递达时由系统自动调用
+	act.sa_flags = 0;
+	sigemptyset(&act.sa_mask);
+	sigaction(SIGCHLD, &act, &oact);        // 把 SIGCHLD 的行为改为捕捉（子进程退出时内核自动发它）
+
+	for (i = 0; i < 10; i++){
+		pid = fork();                   // 父进程返回子进程 PID；子进程返回 0
+		if (pid == 0)
+			break;                  // 子进程跳出循环，不再继续 fork，直接走退出分支
+	}
+	if (pid > 0){
+		printf("wait sigchld...\n");
+		while (1)
+			sleep(1);               // 父进程不轮询，挂起等待 SIGCHLD 被动触发回收
+	} else if (pid == 0){
+		printf("child i %d pid %d exit\n", i, getpid());
+		exit(i);                        // 子进程退出 → 内核向其父进程发送 SIGCHLD
+	} else {
+		perror("fork call failed");
+	}
+}
+```
+
+要点：
+
+- **必须循环回收**：SIGCHLD 是经典信号、不排队——10 个子进程几乎同时退出，内核只保留一个 SIGCHLD；若捕捉函数只调用一次 waitpid，就会漏回收、残留僵尸。`while ((zpid = waitpid(-1, NULL, WNOHANG)) > 0)` 把所有已退出子进程一次收干净；
+- 捕捉函数里用 `WNOHANG` 非阻塞：有僵尸就收，收完立即返回；
+- **捕捉必须在 fork 之前设置**——否则子进程先退出、SIGCHLD 先到达时，父进程还没建立捕捉，就会漏掉；
+- 与第 4 章呼应：主动回收（轮询）与被动回收（信号触发）可以按场景选择，信号方式开销更小、更优雅。
+
+### 10.11 信号实现进程间通信：父子交替报数
+
+信号的最后一个用途：**进程间通信（IPC）**。用一个实例——父子进程交替报数：父进程给子进程发 1，子进程收后回 2，父再回 3、4、5……数值通过信号在父子间来回传递。
+
+要写出这个程序，需要搞定三件事：
+
+**① 信号选择：用开发专用信号**
+
+信号不能乱用——每用一个信号就要对它做处置（捕捉或忽略），它原本的作用就失效了：占用了 2 号信号 Ctrl+C 就不好使；占用了 11 号信号，段错误的处理就受影响。应当使用两个**开发专用信号**：`SIGUSR1`（10 号）与 `SIGUSR2`（12 号）——系统不会主动触发它们，专门提供给软件研发使用。
+
+**② 发送信号时携带数据**
+
+kill 命令、kill 函数都只能发信号、不能携带数据，这里用 **sigqueue** 函数：
+
+```c
+#include <signal.h>
+sigqueue(pid_t pid, int signo, union sigval val);
+```
+
+union sigval 是联合体，两个成员**二选一**（联合体共享同一块内存）：
+
+| 成员 | 类型 | 说明 |
+|---|---|---|
+| `sival_int` | int | 携带整型数据 |
+| `sival_ptr` | void * | 携带指针（地址）数据 |
+
+交替报数携带的是 1、2、3……选 `sival_int` 即可。
+
+**③ 接收信号携带的数据：必须用新版捕捉函数**
+
+旧版捕捉函数接口 `void sig_do(int n)` 只有一个参数（系统传入信号编号），**没有地方接收通信数据**；想接收数据必须用新版三参数接口：
+
+```c
+void sig_do(int n, siginfo_t *info, void *arg);
+// info 中的 si_int、si_ptr 两个成员用于接收联合体数据
+```
+
+系统收到携带数据的信号后，会自动把数据存到 `info->si_int`（对应 sival_int）或 `info->si_ptr`（对应 sival_ptr）——捕捉函数里直接访问即可。
+
+**为什么要捕捉（两个原因）**：
+
+1. 避免两个信号杀死父子进程——SIGUSR1/2 默认动作是终止进程，不捕捉就会互相杀死；
+2. 捕捉函数才能接收信号携带的数据。
+
+**首次发送与后续回传**：后续的回传全部在各自的捕捉函数中完成（像打乒乓球，一方回球另一方自动接）；**首次“发球”由父进程完成**。父子发送方向：父发子用 `SIGUSR1`、子发父用 `SIGUSR2`。父发子的目标 pid 可直接用 `getpid()+1`——Linux 下父子进程 PID 连号（简单可行，但跨系统不保证连号）。
+
+**新版 sigaction 的设置**：
+
+```c
+struct sigaction act, oact;
+act.sa_sigaction = sig_do;      // 新版捕捉函数（替代 sa_handler）
+act.sa_flags = SA_SIGINFO;      // 必选关键字（不再是 0）
+sigemptyset(&act.sa_mask);
+sigaction(SIGUSR2, &act, &oact);
+```
+
+`ipc_signal.c`——父子交替报数完整示例：
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<string.h>
+#include<signal.h>
+
+void sig_parent(int n,siginfo_t * info,void * arg)
+{
+    //打印通信数据
+    printf("parent pid %d , si_int = %d\n",getpid(),info->si_int);
+    //处理通信函数
+    union sigval val;
+    val.sival_int = ++(info->si_int);
+    //回传信号和数据
+    sigqueue(getpid()+1,SIGUSR1,val);
+    usleep(300000);
+}
+
+void sig_child(int n,siginfo_t * info,void * arg)
+{
+    //打印通信数据
+    printf("child pid %d , si_int = %d\n",getpid(),info->si_int);
+    //处理通信函数
+    union sigval val;
+    val.sival_int = ++(info->si_int);
+    //回传信号和数据
+    sigqueue(getppid(),SIGUSR2,val);
+    usleep(300000);
+}
+
+int main(void)
+{
+    //父进程fork之前完成对SIGUSR2信号的捕捉设定
+    struct sigaction act,oact;
+    act.sa_sigaction = sig_parent;
+    act.sa_flags = SA_SIGINFO;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGUSR2,&act,&oact);
+    //父进程设置对SIGUSR1屏蔽，继承给子进程
+    sigset_t nset,oset;
+    sigemptyset(&nset);
+    sigaddset(&nset,SIGUSR1);
+    sigprocmask(SIG_BLOCK,&nset,&oset);
+    //进程创建
+    pid_t pid;
+    pid = fork();
+    if(pid > 0)
+    {
+        //父进程进行第一次信号发送
+        union sigval val;
+        val.sival_int = 1;
+        sigqueue(getpid()+1,SIGUSR1,val);
+        //首次发送完毕等待回传
+        while(1)
+            sleep(1);
+    }
+    else if(pid == 0)
+    {
+        //子进程创建（继承），屏蔽了SIGUSR1
+        struct sigaction act,oact;
+        act.sa_sigaction = sig_child;
+        act.sa_flags = SA_SIGINFO;
+        sigemptyset(&act.sa_mask);
+        sigaction(SIGUSR1,&act,&oact);
+        //捕捉完成后解除屏蔽
+        sigprocmask(SIG_SETMASK,&act.sa_mask,NULL);
+        //子进程捕捉完毕等待信号
+        while(1)
+            sleep(1);
+    }
+    else
+    {
+        perror("fork call failed");
+        exit(0);
+    }
+
+    return 0;
+}
+```
+
+运行效果：父子进程交替打印 `si_int`（1、2、3……递增）；`usleep(300000)` 用于放慢节奏（微秒级，300000 微秒 = 0.3 秒），否则打印速度过快会刷屏。
+
+**时序问题与解决方案（本节的难点）**：
+
+- **现象**：去掉延迟后，父进程 fork 完立即发信号，子进程可能还没来得及执行捕捉设定代码——信号以默认动作（终止）把子进程杀死，联调失败（子进程变僵尸/卡死）；
+- **临时解法**：首次发送前 sleep/usleep 给子进程一个时间片——但 sleep 会拖慢执行进度，不是好方案；
+- **正解：利用信号屏蔽字可继承**——父进程 fork **之前**用 `sigprocmask(SIG_BLOCK)` 屏蔽 SIGUSR1，子进程一出生就继承了这个屏蔽（信号抵达后只能卡在未决态），可以从容完成捕捉设定，然后**解除屏蔽**（用初始化后的空信号集替换：`sigprocmask(SIG_SETMASK, &act.sa_mask, NULL)`）——此后信号递达就能正常捕捉；
+- **注意**：不能用 fork 前保存的 oset 来恢复——子进程继承的“原有屏蔽字”本身就是屏蔽状态（1），要用一个全 0 的信号集替换。
+
+**适用范围**：信号 IPC 不限于父子进程——只要能拿到对方的 PID，就可以向他发送携带数据的信号。
+
+### 10.12 五种触发方式速查
 
 | 方式 | 触发手段 | 常见信号 |
 |---|---|---|
@@ -2380,6 +2823,148 @@ int main()
 | 函数 | kill / raise / abort / sigqueue | 任意（sigqueue 可带数据） |
 | 硬件异常 | 内存越权、越界、CPU 计算异常 | SIGSEGV(11) / SIGBUS(7) / SIGFPE(8) |
 | 软条件 | 管道读端关闭后写；alarm 到时 | SIGPIPE(13) / SIGALRM(14) |
+
+## 第 11 章 线程（Pthread）基础
+
+进程用“一个进程一块独立内存”换来了资源隔离，但每个进程都要消耗一份地址空间，进程数量被内存硬性限制。本章引入更小的执行单元——**线程**：多个线程共享一个进程的资源，只做调度单位。本章覆盖线程的诞生、与进程的关系、用户级/内核级/混合线程、查看命令、共享资源与 NPTL 库；线程库函数与线程安全在后续展开。
+
+### 11.1 线程的诞生
+
+**线程**是操作系统支持的**执行单元（调度单位）**：与进程一样可以获取 CPU、执行指令、完成特定任务。
+
+线程与进程的关键区别在于资源：
+
+- **进程的双重身份**：它既是调度单位，又是**最小的资源分配单位**——每个进程创建时都要分配独立的 0~4G 虚拟地址空间（并映射物理内存），内存开销大；
+- **进程数量的瓶颈**：内存有限，而每个进程都要吃一大块内存——进程数量被内存卡死；
+- **解决问题**：多个线程**共享一个进程的内存资源**——调度单位变多，内存开销不变。
+
+> 类比：一个工人配一个工厂——工人有能力干活，但工厂（内存资源）是昂贵的附加属性；100 个工人就要盖 100 个工厂，国家（系统）再能生工人，也盖不起那么多工厂。改成 10 个工人共用一个工厂，干活的人变多、工厂还是那一座。
+
+**结论**：**进程是最小资源分配单位，线程是最小调度单位**——创建线程不额外分配内存，只获取时间片干活。
+
+> 线程并不“碾压”进程：两者长期共存，说明各有适用场景（线程共享资源带来的便利与风险，是后续线程安全要解决的问题）。
+
+### 11.2 进程与线程的关系
+
+- **包含/寄生关系**：线程存活于进程内部，与进程及其他线程共享资源，完成特定任务；
+- **线程的生存环境**：线程被创建后会占用部分进程内存——典型是 **8M 线程栈**（从进程 0~3G 用户空间中划出的虚拟地址，不是系统额外分配）；
+- **主控线程与普通线程**：进程默认自带一个执行单元，称为**主控线程（主线程）**；主控线程可以创建新的普通线程——主从关系，主控线程就是进程本身；
+- **PCB 与 TCB**：一个进程中所有线程**共享 PCB**（进程信息）；每个线程拥有独立的 **TCB（线程控制块）**，一个包含线程信息的结构体，包含 tid 等线程信息。
+
+```
+进程
+├── PCB（进程信息，所有线程共享）
+├── 内存资源（0~3G 用户空间：堆、全局数据、代码…）
+├── 主控线程（进程默认执行单元）  ← TCB + 8M 线程栈（独立）
+├── 普通线程 1（主控线程创建）   ← TCB + 8M 线程栈（独立）
+└── 普通线程 2                   ← TCB + 8M 线程栈（独立）
+```
+
+### 11.3 线程调度：用户级、内核级与混合线程
+
+回顾：并发 = 多个执行单元共用一个 CPU 按时间片交替（阻塞时时间片就近交给相邻同类执行单元）；并行 = 多核同时执行。线程按实现分为三种：
+
+**用户级线程**：
+
+- 线程库安装在用户空间，由进程内的线程库负责创建、调度、切换；
+- 内核**不认识线程**，只按进程为单位分配时间片；线程使用的是进程“领到”的时间片，在进程内部转手使用；
+- **只支持并发，不支持并行**——内核不知道有多个调度单位，无法把多个线程分到多个核上；
+- 优点：
+  - 可以在任意系统安装用户级线程库使用线程——即使系统本身不支持线程技术；
+  - 系统无需关心用户线程的调度（内核只看到一个进程），调度开销小；
+  - 线程资源数据都在用户层，使用无需频繁层级转换（不需要反复进出内核），某些情况下开销比内核级更小、速度更快；
+- 缺点：不支持物理级并行。
+
+**内核级线程**：
+
+- 系统原生支持，提供原生函数供开发者创建线程；
+- 每个线程创建一个**内核对象**，系统按内核对象分配 CPU 与时间片；
+- 支持并发；硬件多核时支持并行；
+- 内核级线程体系下进程与线程的界线变得模糊——系统只看内核对象（调度单位）的数量来分配资源。
+
+**混合线程**：
+
+- 用户级与内核级结合：每个线程创建内核对象（可并发 + 并行）；
+- 同时将线程资源安装在用户层，线程执行与访问在用户层完成，无需频繁切换到内核，提高访问效率；
+- Windows 的线程属于此类。
+
+| 类型 | 系统是否识别 | 时间片分配 | 并发 | 并行 | 典型场景 |
+|---|---|---|---|---|---|
+| 用户级线程 | 否（只看到进程） | 按进程分配，线程库内部转手 | 支持 | 不支持 | 不支持线程的旧系统 |
+| 内核级线程 | 是（每线程内核对象） | 系统按内核对象分配 | 支持 | 支持（多核） | Linux NPTL |
+| 混合线程 | 是 | 用户层 + 内核对象结合 | 支持 | 支持 | Windows |
+
+### 11.4 查看线程：ps -eLf 与 ps -Lf
+
+```bash
+ps -eLf          # 查看系统中所有线程
+ps -Lf <pid>     # 查看指定进程中的线程
+```
+
+`ps -eLf` 关键列：
+
+| 列 | 含义 |
+|---|---|
+| UID | 用户 id |
+| PID | 进程 id |
+| PPID | 父进程 id |
+| **LWP** | 轻量级进程编号（线程编号） |
+| **NLWP** | 该进程的线程数量 |
+
+- **PID == LWP** 的线程是**主控线程**，其余为普通线程；
+- **NLWP = 1** → 单线程进程；NLWP = 3 → 一个主控线程 + 两个普通线程；
+- **LWP 不是 TID**：LWP 是 int 型编号，用于系统调度管理（类似学号，用于点名）；线程的“真名”是 **TID**，类型为 `unsigned long int`——直接按整型打印可能得到很大的数甚至负数，打印 TID 一般按地址格式处理。
+
+### 11.5 线程间共享与非共享资源
+
+| 类别 | 资源 |
+|---|---|
+| **共享** | PCB（进程信息）、堆、全局变量/静态数据、文件描述符表、工作目录、用户 id 等进程信息、**信号行为** |
+| **非共享** | 线程栈（8M）、TCB（线程信息）、线程优先级、**信号屏蔽字**、errno（见 11.6） |
+
+- **堆可以共享**：一个线程申请的空间，其他线程只要拿到地址就能直接用；
+- **文件描述符表只有一张**：进程打开 3 个文件 + 自带 0/1/2 三个标准描述符，表中一共 6 个，所有线程共用同一张表；
+- **信号行为共享的隐患**：某个线程对信号设置了捕捉，这个设定会共享给所有线程——信号来了可能被其他线程捕捉处理，而不是“本应处理它的线程”。解决：**屏蔽字是线程独立的**——让其他线程各自屏蔽该信号，信号就只会由目标线程处理；
+- **线程优先级独立**：每个线程可以单独调整优先级（优先级越高，获得 CPU 资源越倾斜）。
+
+### 11.6 errno 与线程错误处理
+
+`errno` 是全局错误号变量（`errno.h`）：系统调用失败时置位，用于判断失败原因。例如非阻塞 read 无数据返回 -1、errno 为 EAGAIN——这属于可重试的“包容性错误”，不应直接退出进程。
+
+**多线程共享 errno 的隐患**：T1 的 read 失败，errno 被置为 30；T1 还没处理，T2 的 open 又失败，把 errno 改成 42——T1 最终拿到的是 42 的错误信息，完全错乱。
+
+> 系统实际上对 errno 做了线程局部化处理（多线程访问时各线程看到自己的 errno），但线程库有自己的错误处理惯例，不用 errno。
+
+**线程库惯例**：**函数成功返回 0，失败返回错误号**——用 `strerror(err)` 转成错误描述。
+
+```c
+#include <errno.h>
+int main(void)
+{
+    int err;
+    err = pthread_xxxx();    // 线程库函数成功返回 0，失败返回错误号
+    if (err > 0)
+    {
+        printf("pthread_xxx() error:%s\n", strerror(err));
+    }
+}
+```
+
+几乎所有的 NPTL 线程库函数，错误处理都这么写。
+
+### 11.7 NPTL 线程库与编译
+
+- **NPTL（Native POSIX Thread Library）**：遵循 POSIX 标准的原生线程库，简称 **Pthread**；
+- 典型的内核级线程库；
+- Ubuntu 系统自带，无需用户安装、直接可用；但它随系统版本加入（并非最原始的系统调用），**编译时必须链接库**；
+- 头文件：`#include <pthread.h>`；
+- 编译：
+
+```bash
+gcc x.c -lpthread -o app    # -lpthread 放在 -o 之前，否则报未定义引用
+```
+
+> 线程创建、tid 获取、回收、分离、取消、退出、线程属性与线程安全（锁、同步、条件变量）等内容，后续按线程库函数逐步展开。
 
 ## 附录
 
@@ -2399,10 +2984,16 @@ int main()
 | `kill` | `int kill(pid_t pid, pid_t signo);` | 向任意进程/组发送任意信号（pid 在前、信号在后，与 kill 命令参数相反） |
 | `raise` | `int raise(pid_t signo);` | 向当前进程发送任意信号 |
 | `abort` | `void abort(void);` | 无参数，向当前进程发送固定的 SIGABRT 信号 |
-| `sigqueue` | `int sigqueue(pid_t pid, pid_t signo, union sigval val);` | 发信号并携带 union 消息包（支持 IPC） |
+| `sigqueue` | `int sigqueue(pid_t pid, pid_t signo, union sigval val);` | 发信号并携带 union 消息包（支持 IPC）；sigval 的 `sival_int` / `sival_ptr` 二选一 |
 | `alarm` | `unsigned int alarm(unsigned int seconds);` | 定时器：到时发送 SIGALRM；返回 0 定时成功、>0 剩余未定时秒数 |
-| `sigaction` | `int sigaction(int signo, const struct sigaction *act, struct sigaction *oldact);` | 修改信号行为：SIG_DFL / SIG_IGN / 捕捉函数；oldact 保存原行为供复位 |
-| `sigemptyset` | `int sigemptyset(sigset_t *set);` | 初始化信号集（sigaction 的 sa_mask 初始化用） |
+| `sigaction` | `int sigaction(int signo, const struct sigaction *act, struct sigaction *oldact);` | 修改信号行为：SIG_DFL / SIG_IGN / 捕捉函数；oldact 保存原行为供复位；新版捕捉用 `sa_sigaction` + `SA_SIGINFO` |
+| `sigemptyset` | `int sigemptyset(sigset_t *set);` | 初始化信号集，所有位置 0（sigaction 的 sa_mask 初始化用） |
+| `sigfillset` | `int sigfillset(sigset_t *set);` | 初始化信号集，所有位置 1 |
+| `sigaddset` | `int sigaddset(sigset_t *set, int signo);` | 将信号集中 signo 信号位置 1 |
+| `sigdelset` | `int sigdelset(sigset_t *set, int signo);` | 将信号集中 signo 信号位置 0 |
+| `sigismember` | `int sigismember(sigset_t *set, int signo);` | 查看信号集中 signo 信号的位码并返回（0 或 1） |
+| `sigprocmask` | `int sigprocmask(int how, sigset_t *set, sigset_t *oldset);` | 设置/替换进程屏蔽字；how 传 `SIG_SETMASK` 覆盖替换 |
+| `sigpending` | `int sigpending(sigset_t *set);` | 获取当前进程未决信号集并传出 |
 | `WIFEXITED` / `WEXITSTATUS` | 宏 | 是否正常退出 / 取退出码 |
 | `WIFSIGNALED` / `WTERMSIG` | 宏 | 是否被信号杀死 / 取信号编号 |
 | `pipe` | `int pipe(int fds[2]);` | 创建匿名管道；fds[0] 读端、fds[1] 写端（先 pipe 再 fork，只限亲缘进程间通信） |
@@ -2424,6 +3015,8 @@ int main()
 |---|---|
 | `ps aux` | 查看进程信息（pid、状态、CPU/内存占用）——配合观察父子进程与僵尸 |
 | `ps ajx` | 查看进程间关系：ppid / pid / pgid / sid |
+| `ps -eLf` | 查看系统中所有线程（UID/PID/PPID/LWP/NLWP；PID==LWP 为主控线程） |
+| `ps -Lf <pid>` | 查看指定进程中的线程 |
 | `kill -l` | 列出系统支持的所有信号（64 个，32/33 隐藏） |
 | `jobs` | 查看被挂起的作业及作业编号 |
 | `fg %n` / `bg %n` | 把第 n 号作业唤醒到前台 / 后台执行 |
@@ -2433,7 +3026,7 @@ int main()
 | `kill -9 <pid>` / `kill -11 <pid>` | 发送信号结束进程（-9 强杀；-11 用于异常退出解码） |
 | `man <函数/命令>` | 查手册；编辑器内 Shift+K 跳转手册、q 退出 |
 | `which <命令>` | 查命令/程序的绝对路径（重载 execl 前必用） |
-| `gcc xxx.c -o xxx` | 编译；`-I` 头文件路径、`-g` 调试信息、`-Wall` 严格警告 |
+| `gcc xxx.c -o xxx` | 编译；`-I` 头文件路径、`-g` 调试信息、`-Wall` 严格警告；线程程序需 `-lpthread`（放在 -o 前） |
 | `make` / `make -C ./目录` | 执行 makefile / 跳转目录执行 |
 | `sleep N` | 睡眠（Linux 按秒；Windows 按毫秒） |
 | `tree` | 查看工程目录结构 |
@@ -2451,6 +3044,9 @@ int main()
 - **总线错误**：检查映射/访问范围是否超出文件有效长度（系统发 SIGBUS 7 号信号）；
 - **浮点数例外**：检查除零等 CPU 计算异常（系统发 SIGFPE 8 号信号）；
 - **孤儿进程残留**：`ps ajx` 查组号后 `kill -9 -组号` 按组清理，或用 9.5 的管道方案自动处理；
+- **信号屏蔽后进程无反应**：确认屏蔽字设置是否正确（sigaddset 传的是信号名）；用 sigpending 查未决信号集，确认信号是否已抵达并被阻塞；
+- **SIGCHLD 回收漏收**：捕捉函数内必须循环 `waitpid(-1, NULL, WNOHANG)` 直到返回 0/-1——SIGCHLD 不排队，只回收一次会残留僵尸；
+- **信号 IPC 首包杀死子进程**：父进程 fork 后立即发信号，子进程可能尚未完成捕捉设定——fork 前先屏蔽该信号（子进程继承屏蔽），子进程捕捉设定完成后再解除屏蔽；
 - **mmap 映射失败**：检查两点——映射权限是否 ≤ open 权限；映射大小是否 ≤ 文件大小（超出会触发 SIGBUS 总线错误）；
 - **open 管道文件阻塞**：命名管道要凑齐读、写两个权限才能打开——先跑写端会卡在 open 是正常现象，等读端跑起来就通了；
 - **vim 交换文件**：编辑时提示 .swp 是上次异常退出留下的——按 `R` 恢复内容，或删除该 .swp 后重新打开；写代码**勤保存**（写一段保存一下），防止意外关闭丢失代码；
