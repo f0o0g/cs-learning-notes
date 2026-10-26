@@ -25,13 +25,13 @@
 
 ### 因特网服务提供者lsp(lnternetserviceprovider)
 
-![因特网服务提供者lsp(lnternetserviceprovider)图解](assets/湖科大计算机网络/0003-因特网服务提供者lsp(lnternetserviceprovider).png)
+![因特网服务提供者lsp(lnternetserviceprovider)图解](<assets/湖科大计算机网络/0003-因特网服务提供者lsp(lnternetserviceprovider).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1776325244854-aee1065f-50ed-4997-9c42-fe5864a6cce4.png -->
 
 基于ISP的三层结构的因特网
 
 
-![因特网服务提供者lsp(lnternetserviceprovider)图解](assets/湖科大计算机网络/0004-因特网服务提供者lsp(lnternetserviceprovider).png)
+![因特网服务提供者lsp(lnternetserviceprovider)图解](<assets/湖科大计算机网络/0004-因特网服务提供者lsp(lnternetserviceprovider).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1776325557712-ed8d516e-391f-49e4-95bb-2811cb579d6f.png -->
 
 
@@ -2839,7 +2839,7 @@ NCP 配置完成后，链路进入打开状态，此时可以进行正常的网�
 出现链路故障、一方主动发出终止请求或物理层载波停止时，链路进入终止状态，释放所有资源，最终返回静止状态。
 
 
-![PPP 协议的工作状态 (以拨号接入为例)图解](assets/湖科大计算机网络/0189-PPP-协议的工作状态-(以拨号接入为例).png)
+![PPP 协议的工作状态 (以拨号接入为例)图解](<assets/湖科大计算机网络/0189-PPP-协议的工作状态-(以拨号接入为例).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1779289993220-d7a11178-adad-4f4e-8b7a-75da0491becb.png -->
 
 ---
@@ -5717,11 +5717,11 @@ CIDR将**网络前缀相同**的连续IP地址组成一个**CIDR地址块**。�
 **问题现象**：
 
 
-![场景二：路由聚合不当与黑洞路由 (Null0)图解](assets/湖科大计算机网络/0331-场景二：路由聚合不当与黑洞路由-(Null0).png)
+![场景二：路由聚合不当与黑洞路由 (Null0)图解](<assets/湖科大计算机网络/0331-场景二：路由聚合不当与黑洞路由-(Null0).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781163402789-c1b4f7f1-37cd-4e40-bf00-b75e468ddc4a.png -->
 
 
-![场景二：路由聚合不当与黑洞路由 (Null0)图解](assets/湖科大计算机网络/0332-场景二：路由聚合不当与黑洞路由-(Null0).png)
+![场景二：路由聚合不当与黑洞路由 (Null0)图解](<assets/湖科大计算机网络/0332-场景二：路由聚合不当与黑洞路由-(Null0).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781163498393-c0e93c7a-9586-4594-8fac-93ffdcc18e4d.png -->
 
   
@@ -5735,7 +5735,7 @@ CIDR将**网络前缀相同**的连续IP地址组成一个**CIDR地址块**。�
 针对聚合后不存在的子网，在 R2 上配置一条指向 `Null0` **接口**的明细路由。
 
 
-![场景二：路由聚合不当与黑洞路由 (Null0)图解](assets/湖科大计算机网络/0333-场景二：路由聚合不当与黑洞路由-(Null0).png)
+![场景二：路由聚合不当与黑洞路由 (Null0)图解](<assets/湖科大计算机网络/0333-场景二：路由聚合不当与黑洞路由-(Null0).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781163532216-3278e2a5-3914-457a-b5ea-4b0116af52dd.png -->
 
 + **Null0** 是路由器内部的虚拟接口，形象地称为“黑洞”。数据报进入 Null0 后会被**直接丢弃**（有去无回）。
@@ -6529,7 +6529,7 @@ _若“分片2”在后续传输中遇到更小的MTU，需进行*二次分片_�
 
 
 
-![ICMP 差错报告报文 (5种核心类型)图解](assets/湖科大计算机网络/0381-ICMP-差错报告报文-(5种核心类型).png)
+![ICMP 差错报告报文 (5种核心类型)图解](<assets/湖科大计算机网络/0381-ICMP-差错报告报文-(5种核心类型).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781442153299-237321d2-510b-47ce-91c6-93e8611b02a9.png -->
 
 | **2. 源点抑制**   (Source Quench) | 当路由器或主机因网络拥塞而被迫丢弃数据报时发送，通知源点放慢发送速率。 | 数据报到达路由器 R2 或目的主机 H2 时，若设备缓冲区已满（拥塞），则丢弃数据报并向源点 H1 发送“源点抑制”报文。   _(注：现代网络中，拥塞控制主要由传输层如 TCP 负责，该 ICMP 报文现已极少使用并被 RFC 1812 废弃。)_ |
@@ -6537,11 +6537,11 @@ _若“分片2”在后续传输中遇到更小的MTU，需进行*二次分片_�
 
 
 
-![ICMP 差错报告报文 (5种核心类型)图解](assets/湖科大计算机网络/0382-ICMP-差错报告报文-(5种核心类型).png)
+![ICMP 差错报告报文 (5种核心类型)图解](<assets/湖科大计算机网络/0382-ICMP-差错报告报文-(5种核心类型).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781442204601-718e46ba-4192-4fff-8aa5-15133cc7269e.png -->
 
 
-![ICMP 差错报告报文 (5种核心类型)图解](assets/湖科大计算机网络/0383-ICMP-差错报告报文-(5种核心类型).png)
+![ICMP 差错报告报文 (5种核心类型)图解](<assets/湖科大计算机网络/0383-ICMP-差错报告报文-(5种核心类型).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781442222103-4c0878c9-8f8c-4529-9e01-fbb8d1227900.png -->
 
 | **3. 时间超过**   (Time Exceeded) | **情况A**：路由器收到 TTL 不为 0 的数据报，将其 TTL 减 1 后结果为 0，则丢弃并发送。   **情况B**：目的主机在规定时间内未收齐该数据报的所有分片，丢弃已收分片并发送。 | 某数据报初始 TTL=2。到达 R1 时 TTL 减为 1，正常转发；到达 R2 时 TTL 减为 0，R2 丢弃数据报并向源点 H1 发送“时间超过”报文。 |
@@ -6549,7 +6549,7 @@ _若“分片2”在后续传输中遇到更小的MTU，需进行*二次分片_�
 
 
 
-![ICMP 差错报告报文 (5种核心类型)图解](assets/湖科大计算机网络/0384-ICMP-差错报告报文-(5种核心类型).png)
+![ICMP 差错报告报文 (5种核心类型)图解](<assets/湖科大计算机网络/0384-ICMP-差错报告报文-(5种核心类型).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781442273739-7ee5421e-646d-4865-a719-f5a805bf441c.png -->
 
 | **4. 参数问题**   (Parameter Problem) | 路由器或目的主机发现 IP 数据报首部字段存在无效值或传输误码，导致无法处理时发送。 | 数据报在传输中受干扰导致首部出现误码（或首部选项格式非法），路由器 R1 校验发现后丢弃数据报，并向源点 H1 发送“参数问题”报文。 |
@@ -6557,7 +6557,7 @@ _若“分片2”在后续传输中遇到更小的MTU，需进行*二次分片_�
 
 
 
-![ICMP 差错报告报文 (5种核心类型)图解](assets/湖科大计算机网络/0385-ICMP-差错报告报文-(5种核心类型).png)
+![ICMP 差错报告报文 (5种核心类型)图解](<assets/湖科大计算机网络/0385-ICMP-差错报告报文-(5种核心类型).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781442325157-d6cb21a3-318f-4d31-a92f-1dc81c68ee3d.png -->
 
 | **5. 改变路由**   (Redirect) | 路由器发现主机发送数据报的下一跳不是最优路径时发送，指导主机更新路由表。 | 主机 H1 的默认网关是 R1。当 R1 发现 H1 发往 N2 的数据报最佳路径应直接经过 R4 时，R1 向 H1 发送“改变路由”报文。H1 随后更新路由表，直接将数据报发给 R4。 |
@@ -6565,7 +6565,7 @@ _若“分片2”在后续传输中遇到更小的MTU，需进行*二次分片_�
 
 
 
-![ICMP 差错报告报文 (5种核心类型)图解](assets/湖科大计算机网络/0386-ICMP-差错报告报文-(5种核心类型).png)
+![ICMP 差错报告报文 (5种核心类型)图解](<assets/湖科大计算机网络/0386-ICMP-差错报告报文-(5种核心类型).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781442346525-9fddece2-f35b-4c5e-8198-1a3682449bfa.png -->
 
 ---
@@ -6747,7 +6747,7 @@ _注：因特网中的所有路由器对目的地址为私有地址的 IP 数据
 **NAPT 转换表示例**（补充传输层端口信息）：
 
 
-![网络地址与端口转换 (NAPT)图解](assets/湖科大计算机网络/0400-网络地址与端口转换-(NAPT).png)
+![网络地址与端口转换 (NAPT)图解](<assets/湖科大计算机网络/0400-网络地址与端口转换-(NAPT).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781444012893-e0e5bd37-3c46-4584-abe4-ff4b390ac842.png -->
 
 | 内部私有 IP | 内部源端口 | 外部全球 IP | 外部映射端口 | 协议 |
@@ -8300,7 +8300,7 @@ setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
     - **主机层面**：运行服务器进程的主机通常称为**服务器 (Server Host)**，有时也简称为“服务器”。
 
 
-![客户 服务器方式 (Client Server, C S)图解](assets/湖科大计算机网络/0465-客户-服务器方式-(Client-Server,-C-S).png)
+![客户 服务器方式 (Client Server, C S)图解](<assets/湖科大计算机网络/0465-客户-服务器方式-(Client-Server,-C-S).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781931181278-ed5fbdca-cc14-4048-b511-3cdeb9f1aec9.png -->
 
 **2.工作特征与网络要求**
@@ -8332,7 +8332,7 @@ C/S 方式是因特网上最传统、最成熟的架构模式，广泛应用于�
 + **工作示例**：假设主机 C、D、E、F 均运行同一种 P2P 下载软件。
 
 
-![对等方式 (Peer to Peer, P2P)图解](assets/湖科大计算机网络/0466-对等方式-(Peer-to-Peer,-P2P).png)
+![对等方式 (Peer to Peer, P2P)图解](<assets/湖科大计算机网络/0466-对等方式-(Peer-to-Peer,-P2P).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781931348662-3c7bd7b7-c947-4990-9b52-3df4b298b2c2.png -->
 
 - E 和 F 互为对等方，C 和 D 互为对等方，同时 E 和 D 也互为对等方。
@@ -8397,7 +8397,7 @@ DHCP 的核心交互过程通常被称为 **DORA**（Discover, Offer, Request, A
 **1.DHCP Discover (发现)**
 
 
-![DHCP 的核心工作过程 (DORA 机制)图解](assets/湖科大计算机网络/0468-DHCP-的核心工作过程-(DORA-机制).png)
+![DHCP 的核心工作过程 (DORA 机制)图解](<assets/湖科大计算机网络/0468-DHCP-的核心工作过程-(DORA-机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781931994796-287490e1-efac-41d1-be99-ef3e059b7a9a.png -->
 
 + **触发条件**：主机启用 DHCP 且尚未获得 IP 地址。
@@ -8410,7 +8410,7 @@ DHCP 的核心交互过程通常被称为 **DORA**（Discover, Offer, Request, A
 **2.DHCP Offer (提供)**
 
 
-![DHCP 的核心工作过程 (DORA 机制)图解](assets/湖科大计算机网络/0469-DHCP-的核心工作过程-(DORA-机制).png)
+![DHCP 的核心工作过程 (DORA 机制)图解](<assets/湖科大计算机网络/0469-DHCP-的核心工作过程-(DORA-机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781932386504-453cec8c-cfd2-4145-bf88-cb3b16452d2b.png -->
 
 + **触发条件**：DHCP 服务器收到 Discover 报文。
@@ -8425,7 +8425,7 @@ DHCP 的核心交互过程通常被称为 **DORA**（Discover, Offer, Request, A
 **3.DHCP Request (请求)**
 
 
-![DHCP 的核心工作过程 (DORA 机制)图解](assets/湖科大计算机网络/0470-DHCP-的核心工作过程-(DORA-机制).png)
+![DHCP 的核心工作过程 (DORA 机制)图解](<assets/湖科大计算机网络/0470-DHCP-的核心工作过程-(DORA-机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781932487078-70994a9b-0d5c-40c6-ae72-103ed066354b.png -->
 
 + **触发条件**：客户机选定某个 DHCP 服务器的 Offer。
@@ -8438,7 +8438,7 @@ DHCP 的核心交互过程通常被称为 **DORA**（Discover, Offer, Request, A
 **4.DHCP ACK (确认)**
 
 
-![DHCP 的核心工作过程 (DORA 机制)图解](assets/湖科大计算机网络/0471-DHCP-的核心工作过程-(DORA-机制).png)
+![DHCP 的核心工作过程 (DORA 机制)图解](<assets/湖科大计算机网络/0471-DHCP-的核心工作过程-(DORA-机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781932558914-1b20398e-e6e3-4a67-8dca-5febd9545a8f.png -->
 
 + **触发条件**：被选中的 DHCP 服务器收到 Request 报文。
@@ -8474,7 +8474,7 @@ DHCP 分配 IP 地址采用“租约 (Lease)”机制，客户机必须在租期
 **问题背景**：
 
 
-![跨网段配置：DHCP 中继代理 (Relay Agent)图解](assets/湖科大计算机网络/0474-跨网段配置：DHCP-中继代理-(Relay-Agent).png)
+![跨网段配置：DHCP 中继代理 (Relay Agent)图解](<assets/湖科大计算机网络/0474-跨网段配置：DHCP-中继代理-(Relay-Agent).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781932888125-abb2e6d8-b49d-4bcf-a360-b9c3049c0b8f.png -->
 
 DHCP Discover 报文是链路层和网络层的广播报文，**路由器默认不会转发广播报文**。但是，如果每个子网都部署一台 DHCP 服务器，将导致硬件成本和管理成本急剧上升。
@@ -8486,7 +8486,7 @@ DHCP Discover 报文是链路层和网络层的广播报文，**路由器默认�
 + **优势**：极大地减少了 DHCP 服务器的部署数量，实现了集中化管理。
 
 
-![跨网段配置：DHCP 中继代理 (Relay Agent)图解](assets/湖科大计算机网络/0475-跨网段配置：DHCP-中继代理-(Relay-Agent).png)
+![跨网段配置：DHCP 中继代理 (Relay Agent)图解](<assets/湖科大计算机网络/0475-跨网段配置：DHCP-中继代理-(Relay-Agent).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781932950865-0b5f3d81-f048-4809-993b-9a23df063478.png -->
 
 ---
@@ -8627,7 +8627,7 @@ DNS 解析主要采用两种查询方式：**递归查询**与**迭代查询**�
 为了提高查询效率并减轻根服务器负担，DNS 系统广泛使用了高速缓存机制。
 
 
-![高速缓存 (DNS Cache)图解](assets/湖科大计算机网络/0483-高速缓存-(DNS-Cache).png)
+![高速缓存 (DNS Cache)图解](<assets/湖科大计算机网络/0483-高速缓存-(DNS-Cache).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781937276042-1ec81b2f-07b2-4269-97d1-f444c68c851c.png -->
 
 + **工作原理**：本地 DNS 服务器和主机操作系统都会缓存最近查询过的域名及其 IP 映射。
@@ -8763,7 +8763,7 @@ FTP 协议最显著的设计特点是使用了**两个并行的 TCP 连接**来�
 **1.控制连接 (Control Connection)**
 
 
-![FTP 的核心工作原理 (双连接机制)图解](assets/湖科大计算机网络/0490-FTP-的核心工作原理-(双连接机制).png)
+![FTP 的核心工作原理 (双连接机制)图解](<assets/湖科大计算机网络/0490-FTP-的核心工作原理-(双连接机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781938809796-1f56ccda-cf3c-4f6c-94dc-9cb23af8eb86.png -->
 
 + **建立方式**：FTP 服务器在熟知端口 **TCP 21** 监听。客户端随机选择一个临时端口，主动向服务器的 21 端口发起 TCP 连接。
@@ -8777,7 +8777,7 @@ FTP 协议最显著的设计特点是使用了**两个并行的 TCP 连接**来�
 **主动模式 (Active Mode / PORT 命令)**
 
 
-![FTP 的核心工作原理 (双连接机制)图解](assets/湖科大计算机网络/0491-FTP-的核心工作原理-(双连接机制).png)
+![FTP 的核心工作原理 (双连接机制)图解](<assets/湖科大计算机网络/0491-FTP-的核心工作原理-(双连接机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781938954398-584477af-ad31-42b3-9e49-53dc6bb1010b.png -->
 
 + **建立过程**：客户端通过控制连接发送 `PORT` 命令，告知服务器自己用于接收数据的临时端口号（如端口 X）。随后，**FTP 服务器主动**使用自己的熟知端口 **TCP 20** 作为源端口，向客户端的端口 X 发起 TCP 连接，从而建立数据通道。
@@ -8786,7 +8786,7 @@ FTP 协议最显著的设计特点是使用了**两个并行的 TCP 连接**来�
 **被动模式 (Passive Mode / PASV 命令)**
 
 
-![FTP 的核心工作原理 (双连接机制)图解](assets/湖科大计算机网络/0492-FTP-的核心工作原理-(双连接机制).png)
+![FTP 的核心工作原理 (双连接机制)图解](<assets/湖科大计算机网络/0492-FTP-的核心工作原理-(双连接机制).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781939021975-1066ab03-6e88-44ef-ab3f-15bf26d27f36.png -->
 
 + **建立过程**：客户端通过控制连接发送 `PASV` 命令。服务器收到后，开启一个协商好的临时高端口（如端口 Y），并通过控制连接将端口 Y 的号码告知客户端。随后，**FTP 客户端主动**发起 TCP 连接，连接到服务器的端口 Y，从而建立数据通道。
@@ -8878,7 +8878,7 @@ SMTP (Simple Mail Transfer Protocol) 是因特网标准的邮件发送协议。�
 SMTP 采用基于文本的命令与应答交互机制。以下是一次典型的邮件发送会话流程：
 
 
-![简单邮件传送协议 (SMTP) 工作原理图解](assets/湖科大计算机网络/0497-简单邮件传送协议-(SMTP)-工作原理.png)
+![简单邮件传送协议 (SMTP) 工作原理图解](<assets/湖科大计算机网络/0497-简单邮件传送协议-(SMTP)-工作原理.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781941333704-38964036-6464-4d63-96f8-41393f616d30.png -->
 
 + **连接建立**：TCP 连接成功后，服务器主动发送就绪应答，代码 `220`（如 `220 smtp.163.com ESMTP`）。
@@ -8907,7 +8907,7 @@ _补充：在实际的现代邮件系统中，为了防止滥用，通常在 _`H
 + **主体**：用户撰写的核心文本信息。首部和主体之间必须用一个**空行**隔开。
 
 
-![邮件格式标准 (RFC 5322)图解](assets/湖科大计算机网络/0498-邮件格式标准-(RFC-5322).png)
+![邮件格式标准 (RFC 5322)图解](<assets/湖科大计算机网络/0498-邮件格式标准-(RFC-5322).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781941445303-2e63c429-0aff-4cfa-b44a-d396ec775f0b.png -->
 
 #### （2）MIME (多用途因特网邮件扩展)
@@ -8918,7 +8918,7 @@ _补充：在实际的现代邮件系统中，为了防止滥用，通常在 _`H
 + **工作原理**：在发送端，MIME 将非 ASCII 数据（如二进制附件或 UTF-8 中文）通过特定的编码算法（如 **Base64** 或 **Quoted-Printable**）转换为合法的 ASCII 字符流，然后再通过 SMTP 传输。接收端收到后，再进行逆向解码还原。
 
 
-![MIME (多用途因特网邮件扩展)图解](assets/湖科大计算机网络/0499-MIME-(多用途因特网邮件扩展).png)
+![MIME (多用途因特网邮件扩展)图解](<assets/湖科大计算机网络/0499-MIME-(多用途因特网邮件扩展).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781941645648-c4b65d1a-98ca-40c1-b489-4d68a79d36a2.png -->
 
 + **新增首部字段**：MIME 在邮件首部增加了 `MIME-Version`、`Content-Type`（定义数据类型，如 `text/html`, `image/jpeg`）、`Content-Transfer-Encoding`（定义编码方式）等字段，实现了多媒体邮件表示方法的标准化。
@@ -9039,33 +9039,33 @@ _示例：_`http://www.hnust.edu.cn:80/index.html`
 现代 Web 页面通常由前端“三剑客”协同构建，这些文档部署在服务器端（静态文件或后端动态生成），并通过网络传输至浏览器进行解析：
 
 
-![统一资源定位符 (URL) 与万维网文档图解](assets/湖科大计算机网络/0506-统一资源定位符-(URL)-与万维网文档.png)
+![统一资源定位符 (URL) 与万维网文档图解](<assets/湖科大计算机网络/0506-统一资源定位符-(URL)-与万维网文档.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781942698067-1e4131fb-a9c6-431a-bc29-90a47c23fd82.png -->
 
 + **HTML (超文本标记语言)**：使用标签定义网页的**结构与内容**（如 `<head>`, `<body>`, `<p>`, `<button>`）。
 
 
-![统一资源定位符 (URL) 与万维网文档图解](assets/湖科大计算机网络/0507-统一资源定位符-(URL)-与万维网文档.png)
+![统一资源定位符 (URL) 与万维网文档图解](<assets/湖科大计算机网络/0507-统一资源定位符-(URL)-与万维网文档.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781943046151-89c03059-354b-496b-b4a9-b502ca726536.png -->
 
 + **CSS (层叠样式表)**：从视觉角度定义网页的**样式与布局**（如颜色、字体大小、像素）。
 
 
-![统一资源定位符 (URL) 与万维网文档图解](assets/湖科大计算机网络/0508-统一资源定位符-(URL)-与万维网文档.png)
+![统一资源定位符 (URL) 与万维网文档图解](<assets/湖科大计算机网络/0508-统一资源定位符-(URL)-与万维网文档.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781943374493-fb23d605-98de-48e0-a23d-c759fa0acef0.png -->
 
 
-![统一资源定位符 (URL) 与万维网文档图解](assets/湖科大计算机网络/0509-统一资源定位符-(URL)-与万维网文档.png)
+![统一资源定位符 (URL) 与万维网文档图解](<assets/湖科大计算机网络/0509-统一资源定位符-(URL)-与万维网文档.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781943390391-b2131ce3-a169-422c-91ca-a800622d8110.png -->
 
 + **JavaScript (JS)**：一种脚本语言，用于控制网页的**动态行为与交互逻辑**（如响应点击事件、修改 DOM 元素）。
 
 
-![统一资源定位符 (URL) 与万维网文档图解](assets/湖科大计算机网络/0510-统一资源定位符-(URL)-与万维网文档.png)
+![统一资源定位符 (URL) 与万维网文档图解](<assets/湖科大计算机网络/0510-统一资源定位符-(URL)-与万维网文档.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781943328633-8059449b-6cc9-459d-b4b3-43187a3e2b85.png -->
 
 
-![统一资源定位符 (URL) 与万维网文档图解](assets/湖科大计算机网络/0511-统一资源定位符-(URL)-与万维网文档.png)
+![统一资源定位符 (URL) 与万维网文档图解](<assets/湖科大计算机网络/0511-统一资源定位符-(URL)-与万维网文档.png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781943352013-9b9d9522-c802-420a-b11e-12f8b63e11b5.png -->
 
 ### 3. HTTP 协议基础与连接管理
@@ -9098,13 +9098,13 @@ HTTP 是面向文本的协议，报文中的字段均为 ASCII 字符串，长�
 
 #### 请求报文 (Request)
 
-![请求报文 (Request)图解](assets/湖科大计算机网络/0514-请求报文-(Request).png)
+![请求报文 (Request)图解](<assets/湖科大计算机网络/0514-请求报文-(Request).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781944331957-a61ac305-7fff-4d30-8310-159531858cbb.png -->
 
 **请求行**：由**方法**（如 `GET`, `POST`）、**URL** 和 **HTTP 版本**组成。
 
 
-![请求报文 (Request)图解](assets/湖科大计算机网络/0515-请求报文-(Request).png)
+![请求报文 (Request)图解](<assets/湖科大计算机网络/0515-请求报文-(Request).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781944349467-29db9774-39ea-4a4b-a300-0df055d3d1a9.png -->
 
 **首部行**：包含多个键值对，如：
@@ -9147,13 +9147,13 @@ _主要用于 _`_POST_`_、_`_PUT_`_、_`_PATCH_`_ 等携带数据载荷的请�
 
 #### 响应报文 (Response)
 
-![响应报文 (Response)图解](assets/湖科大计算机网络/0516-响应报文-(Response).png)
+![响应报文 (Response)图解](<assets/湖科大计算机网络/0516-响应报文-(Response).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1782569032760-938d1cd9-6e72-4c12-91d6-e36e9f0885d3.png -->
 
 + **状态码**
 
 
-![响应报文 (Response)图解](assets/湖科大计算机网络/0517-响应报文-(Response).png)
+![响应报文 (Response)图解](<assets/湖科大计算机网络/0517-响应报文-(Response).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781944726142-926332b4-8d10-4c6f-b9cf-a000e495d1d1.png -->
 
 **状态行**：由 **HTTP 版本**、**状态码** 和 **状态短语** 组成。
@@ -9259,7 +9259,7 @@ HTTP 协议本身是**无状态**的，服务器无法识别两次请求是否�
 
 ### 7. 考研真题解析 (408 计算机网络)
 
-![考研真题解析 (408 计算机网络)图解](assets/湖科大计算机网络/0525-考研真题解析-(408-计算机网络).png)
+![考研真题解析 (408 计算机网络)图解](<assets/湖科大计算机网络/0525-考研真题解析-(408-计算机网络).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781945993260-fd42d081-dc49-46eb-b20d-219dfb074d13.png -->
 
 + **考点**：HTTP 请求报文首部字段的含义。
@@ -9272,7 +9272,7 @@ HTTP 协议本身是**无状态**的，服务器无法识别两次请求是否�
 ---
 
 
-![考研真题解析 (408 计算机网络)图解](assets/湖科大计算机网络/0526-考研真题解析-(408-计算机网络).png)
+![考研真题解析 (408 计算机网络)图解](<assets/湖科大计算机网络/0526-考研真题解析-(408-计算机网络).png>)
 <!-- image-source: https://cdn.nlark.com/yuque/0/2026/png/67474974/1781946026669-7578d29a-58dc-4d28-b52a-4b9bfa6b6a31.png -->
 
 + **场景**：浏览器请求 `rfc.html`，该页面引用了 2 个 JPEG 小图像。采用**持续连接**且**非流水线**方式。
