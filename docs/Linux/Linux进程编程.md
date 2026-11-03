@@ -86,6 +86,8 @@
 | code 代码段 | 程序逻辑（CPU 按代码执行） |
 | 末尾节点 | 结束/跳转节点，CPU 执行到这里表示程序结束 |
 
+经典 32 位布局有固定地址口径：最底部是保留区，代码段从 `0x08048000` 开始（gcc 生成的可执行文件几乎都落在这个地址），之后依次是数据段、BSS 段、堆（向上长）、库空间、栈（向下长），顶部是命令行参数与环境变量。
+
 ![0~3G 用户空间布局：从命令行参数到代码段](images/01-user-space.png)
 
 **main 函数的参数**：
@@ -99,12 +101,14 @@ int main(int argc, char *argv[])
 
 ### 1.5 进程控制块 PCB
 
-**PCB（进程控制块）** 是内核空间里为每个进程建立的结构体，**详细记录进程的全部状态和信息**：
+**PCB（进程控制块）** 是内核空间里为每个进程建立的结构体，**详细记录进程的全部状态和信息**；在 Linux 中它的具体实现是内核源码里的 `struct task_struct`（源码中常直接称为 task）。
 
 - PID（进程 ID，系统内唯一编号，类似身份证号）；
 - 进程状态、启动时间、访问的资源、是否存活等。
 
 类比：PCB 比户口本记录得还全——户口只记出生地、户籍、民族；PCB 记录进程每时每刻的状态。**PCB 不关心进程"在干什么任务"**——身份档案与工作内容分开存放（身份证上看不出你在哪上班，进公司后看工作证）。
+
+`task_struct` 的成员数以百计（随内核版本不断增长），除 PID 与状态外，还记调度信息、地址空间描述、打开的文件表、信号处理设定等，所以 PCB 被视为进程存在的唯一标志：PCB 被回收，进程才算真正消失。
 
 想访问 PCB 里的数据（如 PID），要看系统是否提供接口：系统提供函数（如 `getpid()`）就能经上下文切换读取；不提供的就访问不了。
 
@@ -2980,6 +2984,8 @@ ps -Lf <pid>     # 查看指定进程中的线程
 - **信号行为共享的隐患**：某个线程对信号设置了捕捉，这个设定会共享给所有线程——信号来了可能被其他线程捕捉处理，而不是“本应处理它的线程”。解决：**屏蔽字是线程独立的**——让其他线程各自屏蔽该信号，信号就只会由目标线程处理；
 - **线程优先级独立**：每个线程可以单独调整优先级（优先级越高，获得 CPU 资源越倾斜）。
 
+![线程间共享与非共享资源：堆、全局变量、文件描述符、用户 id、信号行为共享，线程栈、TCB、屏蔽字独享](images/11-thread-share.png)
+
 ### 11.6 errno 与线程错误处理
 
 `errno` 是全局错误号变量（`errno.h`）：系统调用失败时置位，用于判断失败原因。例如非阻塞 read 无数据返回 -1、errno 为 EAGAIN——这属于可重试的“包容性错误”，不应直接退出进程。
@@ -3010,6 +3016,7 @@ int main(void)
 - **NPTL（Native POSIX Thread Library）**：遵循 POSIX 标准的原生线程库，简称 **Pthread**；
 - 典型的内核级线程库；
 - Ubuntu 系统自带，无需用户安装、直接可用；但它随系统版本加入（并非最原始的系统调用），**编译时必须链接库**；
+- **注意**：某些 pthread 函数即使不加 -lpthread 也不报错，但函数调用会失效——使用任何线程库函数，编译时都必须加库；
 - 头文件：`#include <pthread.h>`；
 - 编译：
 
@@ -3017,7 +3024,1196 @@ int main(void)
 gcc x.c -lpthread -o app    # -lpthread 放在 -o 之前，否则报未定义引用
 ```
 
-> 线程创建、tid 获取、回收、分离、取消、退出、线程属性与线程安全（锁、同步、条件变量）等内容，后续按线程库函数逐步展开。
+> 线程创建、tid 获取、取消、回收、分离、退出、状态与线程属性已在本章 11.8~11.15 展开；线程安全（锁、同步、条件变量）为后续内容。
+
+### 11.8 线程创建：pthread_create
+
+```c
+int pthread_create(pthread_t *tid, const pthread_attr_t *attr,
+                   void *(*busines)(void *), void *arg);
+```
+
+四个参数：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `tid` | pthread_t * | **传出参数**：创建成功，系统把新线程 ID 写入该变量 |
+| `attr` | pthread_attr_t * | 线程属性；传 `NULL` 为默认属性（默认属性已满足绝大多数开发需求） |
+| `busines` | void *(*)(void *) | 线程工作函数地址，用户自行声明实现；线程创建后系统自动执行 |
+| `arg` | void * | 线程工作参数，创建时传入，busines 函数内可直接访问 |
+
+- `pthread_t` 是**线程 ID 类型**（本质为 `unsigned long int`）；
+- 主线程的工作区域默认为 `_start`（即 main 函数部分），普通线程的任务代码写在 busines 函数中；
+- **注意**：普通线程还没执行完，main 函数就结束 → 进程终止 → 所有线程被关闭；多线程模型中**主线程必须是最后退出的**；
+- 返回值：**成功返回 0，失败返回错误号**，用 `strerror(err)` 获取错误描述（与系统调用返回 -1 的习惯不同）。
+
+![线程创建：pthread_create 四参数与主线程关系](images/11-thread-create.png)
+
+`thread_create.c`——创建普通线程并打印其 tid：
+
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<pthread.h>
+#include<string.h>
+
+void *tb(void *arg)
+{
+    //普通线程代码区
+    printf("普通线程创建成功\n");
+    while(1)
+        sleep(1);
+}
+
+int main(void)
+{
+    //主线程代码位置
+    pthread_t tid;
+    int err;
+    int var = 1024;
+    // 第一参数必须传 tid 的地址；传值会导致指针类型错误
+    if((err = pthread_create(&tid,NULL,tb,(void*)var)) > 0)
+    {
+        printf("thread_create error:%s\n",strerror(err));
+        exit(0);
+    }
+
+    printf("主线程创建普通线程成功，普通线程tid（已十六进制打印）：0x%x\n",(unsigned int)tid);
+    while(1)
+        sleep(1);
+
+    return 0;
+}
+```
+
+编译运行：`gcc thread_create.c -lpthread -o app`、`./app`。现象：普通线程打印“普通线程创建成功”，主线程打印普通线程 tid 后双方各自循环；用 `ps -eLf` 可看到该进程 NLWP = 2（两个线程），PID == LWP 的那个是主控线程。
+
+> 第一参数写成 `tid`（不取地址）是常见笔误：pthread_create 需要的是 `pthread_t *`，传值会引发指针错误、运行时崩溃。
+
+**单进程能创建多少线程？** `max_threads.c`——循环创建直到失败：
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<string.h>
+#include<pthread.h>
+
+void *tb(void *arg)
+{
+    while(1)
+        sleep(1);
+}
+
+int main(void)
+{
+    pthread_t tid;
+    int err;
+    int flag = 0;
+    while(1)
+    {
+        if((err = pthread_create(&tid,NULL,tb,NULL)) > 0)
+        {
+            printf("thread create error:%s\n",strerror(err));
+            exit(0);
+        }
+        printf("flag = %d\n",flag++);
+    }
+
+    return 0;
+}
+```
+
+运行结果：**32 位系统约能创建 381 个**，64 位系统可多达 11000 以上（与系统配置上限有关）。
+
+> 为什么是 381？32 位进程的用户空间约 3G，每个线程默认占 **8M 线程栈**：`3G ÷ 8M ≈ 381`。线程栈是从进程虚拟地址空间里划分的（见 11.2）。
+
+### 11.9 获取线程 ID：pthread_self
+
+```c
+pthread_t pthread_self(void);   // 返回调用线程自身的 tid
+```
+
+`pthread_self.c`——主线程与普通线程各自获取自身 tid：
+
+```c
+#include<stdio.h>
+#include<pthread.h>
+#include<unistd.h>
+
+void *tb(void* arg)
+{
+    printf("普通线程被创建tid 0x%x\n",(unsigned int)pthread_self());
+    while(1)
+        sleep(1);
+}
+
+int main()
+{
+    pthread_t tid;
+    pthread_create(&tid,NULL,tb,NULL);
+    printf("主线程id 0x%x，创建的普通线程id 0x%x\n",(unsigned int)pthread_self(),(unsigned int)tid);
+
+    while(1)
+        sleep(1); 
+
+    return 0; 
+}
+```
+
+要点：
+
+- **线程内部获取的 tid 与其他线程保存的 tid：相等但不等价**——内部获取时线程必然存活有效；而外部保存的 tid 指向的线程可能已经退出；
+- `pthread_t` 是 `unsigned long int`，打印时建议 `0x%x` 并强转 `(unsigned int)`；`ps` 里的 **LWP 不是 TID**（见 11.4）；
+- 主线程、普通线程都可以用 `pthread_self()` 获取自己的身份，二者地位对等。
+
+### 11.10 线程取消：pthread_cancel 与取消点
+
+```c
+int pthread_cancel(pthread_t tid);   // 指定目标线程，发出取消（杀死）请求
+```
+
+- 取消请求抵达线程后，**线程内部必须执行到取消点（系统调用）才能真正终止**；没有取消点，事件处理不了，线程杀不死；
+- 常见取消点：`sleep`、`printf` 等系统调用；
+- `pthread_testcancel()`：**专门制造一个取消点**，本身没有其他功能（想给死循环线程加取消点就用它）；
+- 被取消的线程在 `pthread_join` 回收时得到返回值 **-1**；因此**线程自身返回值禁止设置为 -1**（该值保留给取消）；
+- 线程可设置是否允许取消：默认允许（ENABLE），改为不允许（DISABLE）后无法被取消。
+
+![线程取消与取消点](images/11-thread-cancel.png)
+
+`cancel.c`——线程自己制造取消点，主线程 3 秒后取消它：
+
+```c
+#include<stdio.h>
+#include<pthread.h>
+#include<unistd.h>
+
+void *tb(void *arg)
+{
+    //设置取消点（系统调用）
+    while(1)
+        pthread_testcancel();
+}
+
+int main()
+{
+    pthread_t tid;
+    pthread_create(&tid,NULL,tb,NULL);
+    sleep(3);
+    pthread_cancel(tid);//尝试取消
+
+    while(1)
+        sleep(1);
+
+    return 0;
+}
+```
+
+运行现象：不调用 `pthread_testcancel` 时，线程是纯死循环、没有取消点，`pthread_cancel` 无效（进程里仍是两个线程）；加上该函数后，3 秒后线程被取消，`ps -eLf` 中线程数降为 1。
+
+### 11.11 线程回收：pthread_join
+
+```c
+int pthread_join(pthread_t tid, void **reval);
+```
+
+| 参数 | 说明 |
+|---|---|
+| `tid` | 指定要回收的线程 id |
+| `reval` | 接收线程的返回值（退出码）；不需要则传 `NULL` |
+
+- 调用后**阻塞等待**目标线程结束，再释放其资源；多个线程需要**循环多次调用**（一次 join 回收一个）；
+- **不回收的后果**：线程结束后 TCB 残留，造成内存泄漏（**僵线程**）——与进程的僵尸进程同理；
+- 返回值：成功 0，失败返回错误号。“回收一个不存在的 / 已分离的线程”会失败（错误为无效参数）。
+
+`join.c`——创建线程、3 秒后取消并回收，读取返回值：
+
+```c
+#include<stdio.h>
+#include<pthread.h>
+#include<unistd.h>
+
+void *tb(void *arg)
+{
+    //设置取消点（系统调用）
+    int seconds = 5;
+    while(seconds--)
+    {
+        printf("thread 0x%x,seconds %d\n",(unsigned int)pthread_self(),seconds);
+        sleep(1);
+    }
+    //线程退出码
+    return (void*)4;//pthread_exit((void*)4);
+}
+
+int main()
+{
+    pthread_t tid;
+    pthread_create(&tid,NULL,tb,NULL);
+
+    //阻塞回收
+    void *reval = NULL;
+    //主线程等待3s后杀掉
+    sleep(3);
+    pthread_cancel(tid);//尝试取消
+    pthread_join(tid,&reval);//等待回收并接收退出值
+    printf("master 0x%x,join 0x%x success,0x%x return value %ld\n",(unsigned int)pthread_self(),(unsigned int)tid,(unsigned int)reval,(long int)reval);
+
+    while(1)
+        sleep(1);
+
+    return 0;
+}
+```
+
+运行现象：线程原本要打印 5 秒，主线程 3 秒时就取消它，join 立即返回；打印出的返回值为 **-1**（被取消的标记），而不是 `return (void*)4` 的 4。
+
+> 退出值规范：**线程返回值不要用 -1**（被取消的线程回收后也是 -1，无法区分）；常用小整数或指针。
+
+### 11.12 线程分离：pthread_detach
+
+```c
+int pthread_detach(pthread_t tid);        // 将指定线程设为分离态
+pthread_detach(pthread_self());           // 将自身设为分离态
+```
+
+**线程只有两种退出状态（二选一）**：
+
+| 状态 | 含义 | 特点 |
+|---|---|---|
+| `PTHREAD_JOINABLE` 回收态（默认） | 线程结束后必须由其他线程 join 回收 | 不回收 → TCB 残留 → 内存泄漏；**可以获取返回值** |
+| `PTHREAD_DETACHED` 分离态 | 线程结束后由系统自动回收，无需用户参与 | 只释放 TCB，**返回值被丢弃** |
+
+**三条硬规则**：
+
+1. 回收 → 分离的转换**不可逆**（分离态无法改回回收态）；
+2. 不能对**正在回收阶段**的线程做 detach 设置（设置失败）；
+3. 不能对**分离线程**做 join 回收（回收失败，错误为无效参数）。
+
+![线程两种退出状态：回收态与分离态](images/11-thread-join-detach.png)
+
+`detach.c`——线程内部把自身设为分离态，主线程再尝试 join：
+
+```c
+#include<stdio.h>
+#include<pthread.h>
+#include<unistd.h>
+
+void *tb(void *arg)
+{
+    //设置取消点（系统调用）
+    int seconds = 100;
+	pthread_detach(pthread_self());//设置分离态
+    while(seconds--)
+    {
+        printf("thread 0x%x,seconds %d\n",(unsigned int)pthread_self(),seconds);
+        sleep(1);
+    }
+    //线程退出码
+    return (void*)4;//pthread_exit((void*)4);
+}
+
+int main()
+{
+    pthread_t tid;
+    pthread_create(&tid,NULL,tb,NULL);
+
+    //阻塞回收
+    void *reval = NULL;
+    int err;
+	sleep(0);//切换时间片
+	if((err = pthread_join(tid,&reval))>0)
+	{
+		printf("pthread_join error%s/n",strerror(err));
+		exit(0);
+	}
+    printf("master 0x%x,join 0x%x success,0x%x return value %ld\n",(unsigned int)pthread_self(),(unsigned int)tid,(unsigned int)reval,(long int)reval);
+
+    while(1)
+        sleep(1);
+
+    return 0;
+}
+```
+
+运行现象：`sleep(0)` 让主线程先让出一次时间片，确保普通线程已把自己设为分离态；随后 join 失败，打印 `pthread_join error无效的参数`——分离线程不能回收。
+
+**什么时候用 detach、什么时候改属性？**
+
+- 多线程模型中**所有线程都是分离态** → 用属性批量创建（见 11.15 用途一），不必逐个 detach；
+- 只有**少数线程无需回收** → 让线程内部自行调用 `pthread_detach(pthread_self())`，比在创建处逐个设置更方便。
+
+### 11.13 线程退出：pthread_exit 与四种退出方式
+
+```c
+void pthread_exit(void *reval);   // 退出当前线程，不影响进程；参数为退出码（需强转）
+```
+
+线程的**四种退出方式**：
+
+| 方式 | 影响范围 | 说明 |
+|---|---|---|
+| `return` | 当前线程 | 线程函数执行 return，该线程结束（返回值即退出码） |
+| `pthread_exit` | 当前线程 | 显式退出当前线程，进程与其他线程不受影响 |
+| `pthread_cancel` | 目标线程 | 由其他线程取消它（目标线程需有取消点） |
+| `exit` | **整个进程** | 进程终止，所有线程全部关闭 |
+
+- **主线程与普通线程没有本质区别**：普通线程可以继续创建线程，可以相互回收、相互取消；主线程并非不可替代；
+- 但主线程一旦执行 `exit`，整个进程终止——“主线程必须最后退出”正是这个原因（见 11.8）；
+- pthread_exit 传退出码时记得强转，如 `pthread_exit((void*)8);`。
+
+![四种退出方式：return 与 pthread_exit 只结束本线程，cancel 取消目标线程且需取消点，exit 结束整个进程](images/11-thread-exit.png)
+
+### 11.14 线程状态与状态转换
+
+线程和进程一样有状态，区别在于**线程状态记录在 TCB 中**：一个进程内的多个线程可以分别处于不同状态——主线程在等 join、普通线程还在跑，互不影响。弄不清状态与状态改变操作，就判断不出一个线程“为什么不动了”。
+
+**五种运行状态**：
+
+| 状态 | 含义 | 典型场景 |
+|---|---|---|
+| 创建/就绪 | 线程已创建，等待 CPU 时间片 | `pthread_create` 成功返回后 |
+| 运行 | 获得 CPU，执行线程函数 | 正在执行 `busines` 函数 |
+| 阻塞（S） | 等待资源、主动放弃 CPU | `sleep`、等锁、`cond_wait`、`join`、I/O |
+| 挂起（T） | 被信号停止，等待恢复 | `SIGSTOP`、终端 `Ctrl+Z`（SIGTSTP） |
+| 终止 | 线程函数结束或被取消 | `return`、`pthread_exit`、`pthread_cancel` 生效 |
+
+- 阻塞与挂起的区别：阻塞是**线程自己在等资源**，条件满足自动回就绪；挂起是**外部信号强制停止**，必须收到 `SIGCONT` 才恢复；
+- 阻塞中还有**不可中断睡眠（D）**：等内核 I/O（如磁盘）时不能被信号打断，用户代码一般不直接制造这种状态；
+- **挂起作用于整个进程**：终端 `Ctrl+Z`（SIGTSTP）停止前台进程组，进程内所有线程一起进入 T，线程没有单独的挂起 API；
+- 线程终止只释放自己的 TCB 与线程栈，进程和其他线程继续运行；但 `exit` 例外——它会终止整个进程（见 11.13）。
+
+![线程状态转换：五种运行状态与状态改变操作](images/11-thread-states.png)
+
+**状态改变的操作**：
+
+| 当前状态 | 操作 | 结果状态 | 说明 |
+|---|---|---|---|
+| 创建 | `pthread_create` | 就绪 | 创建成功即进入就绪队列 |
+| 就绪 | 获得 CPU 时间片 | 运行 | 由系统调度，多核可并行 |
+| 运行 | 时间片耗尽 / `sched_yield` | 就绪 | 让出 CPU，等待下一次调度 |
+| 运行 | `sleep` / `usleep` / `nanosleep` | 阻塞（S） | 睡眠到期自动回就绪 |
+| 运行 | `pthread_mutex_lock`（锁被占） | 阻塞（S） | 其他线程解锁后竞争锁 |
+| 运行 | `pthread_cond_wait` | 阻塞（S） | 挂起并释放锁；被 signal / broadcast 唤醒后重新加锁、回就绪（见 12.8） |
+| 运行 | `pthread_join` | 阻塞（S） | **调用者**等待目标线程退出 |
+| 运行 | `read` / `write` 等 I/O 等待 | 阻塞（S/D） | 数据就绪或被中断后回就绪 |
+| 运行/就绪 | `SIGSTOP` / `Ctrl+Z` | 挂起（T） | 进程级，所有线程一起停 |
+| 挂起 | `SIGCONT` / `fg` | 就绪 | 恢复后先回就绪，等时间片 |
+| 运行 | `return` / `pthread_exit` | 终止 | 只结束当前线程 |
+| 运行/阻塞 | `pthread_cancel` | 终止 | 目标线程必须执行到取消点（见 11.10） |
+| 终止（joinable） | `pthread_join` | 资源释放 | 回收 TCB 与栈，取得返回值 |
+| 终止（detached） | 系统自动 | 资源释放 | 无需用户回收，返回值丢弃 |
+
+![状态改变操作速查：进入阻塞、回到就绪、终止与回收](images/11-thread-state-ops.png)
+
+**两个必须分清的概念**：
+
+- **运行状态**（就绪 / 运行 / 阻塞 / 挂起 / 终止）描述线程“此刻能不能跑”；
+- **回收状态**（joinable / detached，见 11.12）描述线程“结束之后谁来收尸”——两者是不同维度：一个线程可以在运行中被设为分离态，但它的运行状态仍是运行；终止后的 joinable 线程若不 join，TCB 残留，形成“僵线程”。
+
+**与进程状态的异同**：
+
+| 对比项 | 进程 | 线程 |
+|---|---|---|
+| 状态标识 | R / S / D / T / Z | R / S / D / T（终止后 joinable 未回收 → TCB 残留，ps 中不可见） |
+| 地址空间 | 独立 0~4G | 共享所属进程的 0~3G |
+| 终止影响 | 只影响自己，父进程回收 | 只影响自己；`exit` 会终止整个进程 |
+| 查看方式 | `ps aux` 的 STAT 列 | `ps -Lf <pid>` 的 STAT 列、`/proc/<pid>/task/<tid>/stat` 第 3 字段 |
+
+- `ps -Lf <pid>` 能看到每个 LWP 的 STAT：主线程 PID == LWP；一个进程里可以同时出现 R（在跑的线程）和 S（等锁的线程）；
+- 线程的“僵尸”叫**僵线程**：线程已结束但 joinable 未回收，TCB 残留造成内存泄漏——处理方式就是 `pthread_join`；
+- 进程的僵尸（Z）是 PCB 残留，线程终止后 LWP 已经消失，所以 **ps 里通常看不到“Z 线程”**，不要和进程僵尸混为一谈。
+
+**易错点**：
+
+1. **唤醒不等于运行**：`pthread_cond_signal` / 解锁只是把线程放回就绪队列，它还要等时间片；
+2. **`pthread_cond_wait` 会释放锁再挂起**，被唤醒返回前会重新加锁——所以调用前必须先持锁（见 12.8）；
+3. **`pthread_join` 阻塞的是调用者**，被等待的线程该跑还是跑；主线程 join 普通线程时，主线程进入 S；
+4. **`pthread_cancel` 需要取消点**：纯死循环没有系统调用，取消请求无法生效（见 11.10）；
+5. **分离态不是运行状态**：`pthread_detach` 不改变线程此刻是就绪还是阻塞，只改它退出后的回收方式；
+6. **主线程不是特殊的线程**：它同样会就绪、阻塞、运行，只是它一旦 `exit`，整个进程结束。
+
+> 一句话记忆：**就绪等 CPU，运行占 CPU，阻塞等资源，挂起等信号，终止等回收**；唤醒先回就绪，回收看 joinable/detached。
+
+### 11.15 线程属性：pthread_attr_t
+
+`pthread_attr_t` 用来定制线程的“形态”——类似游戏捏脸的属性面板：同一类线程，按需求调整优先级、栈大小、退出状态等，再用它创建线程。
+
+**可自定义的属性成员**：
+
+| 成员 | 作用 |
+|---|---|
+| 优先级 | 决定线程获得 CPU 资源的倾斜程度 |
+| 警戒缓冲区 | 防栈溢出的一道“缓冲带”，默认至少一页 |
+| 退出状态 | 回收态 / 分离态 |
+| 栈地址 | 自定义线程栈的起始地址 |
+| 栈大小 | 自定义线程栈容量（默认 8M） |
+
+**常用属性函数**：
+
+| 函数 | 作用 |
+|---|---|
+| `pthread_attr_init(&attr)` | 初始化属性，初始化为默认属性 |
+| `pthread_attr_destroy(&attr)` | 销毁属性，释放属性资源 |
+| `pthread_attr_getdetachstate(&attr, &state)` | 将属性中的退出状态获取传出到 state |
+| `pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)` | 将属性中的退出状态改为分离态 |
+| `pthread_attr_setstack(&attr, stackaddr, stacksize)` | 设置自定义栈地址与栈大小 |
+
+![线程属性的两类用途](images/11-thread-attr.png)
+
+`getdetachstate.c`——属性设置四步：查看默认状态、改为分离态、自定义 1MB 栈、用属性创建线程：
+
+```c
+#include<stdio.h>
+#include<pthread.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<string.h>
+
+void *tb(void* arg)
+{
+    while(1)
+        sleep(1);   
+}
+
+int main()
+{
+    pthread_attr_t attr;
+    pthread_t tid;
+    int err;
+
+    pthread_attr_init(&attr);            // 初始化属性（默认属性）
+    // 1. 查看默认退出状态（默认为回收态）
+    int detachstate;
+    pthread_attr_getdetachstate(&attr,&detachstate);
+    if(detachstate == PTHREAD_CREATE_DETACHED)
+        printf("默认线程退出状态是 detached\n");
+    else if(detachstate == PTHREAD_CREATE_JOINABLE)
+        printf("默认线程退出状态是 joinable\n");
+
+    // 2. 改为分离态：之后创建的线程无需 join
+    pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
+
+    // 3. 自定义栈大小（1MB），须自行申请栈空间
+    size_t stacksize = 0x100000;
+    void *stackaddr = (void*)malloc(stacksize);
+    if(stackaddr == NULL)
+    {
+        perror("malloc failed");
+        exit(0);
+    }
+    pthread_attr_setstack(&attr,stackaddr,stacksize);
+
+    // 4. 使用自定义属性创建线程
+    if((err = pthread_create(&tid,&attr,tb,NULL)) > 0)
+    {
+        printf("thread create error:%s\n",strerror(err));
+        exit(0);
+    }
+
+    pthread_attr_destroy(&attr);   // 属性用完销毁
+    while(1)
+        sleep(1);
+
+    return 0;
+}
+```
+
+> 易错点：`pthread_attr_getdetachstate` 取出的值要与 `PTHREAD_CREATE_DETACHED`（分离） / `PTHREAD_CREATE_JOINABLE`（回收）正确对应，两个分支写反会把默认状态报错。
+
+**用途一：批量创建分离线程**
+
+属性中设为 `PTHREAD_CREATE_DETACHED` 后再创建，线程一出生就是分离态——适合多线程模型中“所有线程都不需要回收”的场景，无需再逐个调 `pthread_detach`。
+
+**用途二：修改线程栈大小（提高 32 位系统线程数量）**
+
+默认每线程 8M 栈，32 位进程用户空间约 3G：`3G ÷ 8M ≈ 381` 就是线程数上限。自定义更小的栈能明显提升数量。把创建放进循环、每轮申请 1MB 栈即可验证：
+
+```c
+int flag = 0;
+while(1)
+{
+    stackaddr = (void*)malloc(0x100000);              // 每轮 1MB 自定义栈
+    if(stackaddr == NULL)
+        break;
+    pthread_attr_setstack(&attr,stackaddr,0x100000);
+    if((err = pthread_create(&tid,&attr,tb,NULL)) > 0)
+    {
+        printf("thread create error:%s\n",strerror(err));
+        break;
+    }
+    printf("number %d\n",++flag);
+}
+```
+
+- 32 位系统：修改栈大小能把线程数量从 381 提升到数千；
+- 64 位系统：虚拟地址空间很大，实测约 11000+，**已到系统配置上限，改栈大小无效**（仍是 11000+）；
+- **隐患**：栈并非越小越好——盲目改小会导致栈溢出、线程崩溃，栈溢出会触发 `SIGBUS` 把进程杀掉。
+
+> 线程数量与并发能力是两个概念：能创建 11000 个不代表能同时跑 11000 个。实际使用建议：**并行任务数 ≈ CPU 核数 + 1，并发任务数 ≈ CPU 核数 × 2**。
+
+### 11.16 线程原语小结与后续
+
+本章用到的线程库函数一览：
+
+| 函数 | 作用 | 关键点 |
+|---|---|---|
+| `pthread_create` | 创建线程 | 4 参数；成功 0、失败错误号；主线程最后退出 |
+| `pthread_self` | 获取自身 tid | 内部获取的 tid 必然有效；外部保存的 tid 可能失效 |
+| `pthread_cancel` | 取消线程 | 目标线程必须有取消点；回收后返回值为 -1 |
+| `pthread_testcancel` | 制造取消点 | 无其他功能 |
+| `pthread_join` | 阻塞回收 | 不回收 → TCB 残留（僵线程）；一次回收一个 |
+| `pthread_detach` | 设置分离态 | 分离线程自动回收、无返回值；不能与 join 混用 |
+| `pthread_exit` | 退出当前线程 | 不影响进程；参数需强转 |
+| `pthread_attr_*` | 线程属性 | 批量创建分离线程、自定义栈大小 |
+
+线程“能跑起来”之后，下一部分要解决的是**线程安全**：共享资源访问互斥（互斥锁、读写锁、自旋锁、进程锁、比较交换），线程同步与控制调度（条件变量），以及多线程下的死锁问题。
+
+## 第 12 章 线程安全
+
+上一个部分解决了“线程怎么创建、回收、退出”，本章解决“多个线程一起跑怎么不出乱子”。线程安全由两个部分组成：**资源访问互斥**（用锁保护共享数据，避免读写冲突）与**线程控制与调度**（用条件变量按条件挂起、唤醒线程，让线程有序配合）。两者共同的目标：多线程程序在共享资源上配合执行，不产生冲突。
+
+![线程安全的锁技术全景](images/12-lock-types.png)
+
+### 12.1 共享资源与竞争条件
+
+多线程开发经常要访问共享资源：全局变量、文件、数据库等——这些资源在进程内只有一份，使用时**必须加以保护**，否则会出现数据异常或访问异常。
+
+**一个经典的反例：两个线程各对全局变量加 1**。C 语言的 `var++` 看似一步，实际对应三条指令：
+
+1. 从内存取值到寄存器（load）；
+2. 寄存器加 1（add）；
+3. 写回内存（store）。
+
+如果两条线程的指令穿插执行：T1 读到 0 但还没写回，T2 也从内存读到 0，两边都算出 1——两次自增只加了一次。期望 20000 的结果可能只有 19999，**每发生一次冲突就少加 1**。
+
+![竞争条件：三次自增指令被穿插](images/12-race-condition.png)
+
+**后果不只一个**：
+
+- **结果异常**：多次累加的结果偏小，而且是**不可复现的**（有时对、有时错，最容易遗漏的 Bug）；
+- **资源浪费**：两个线程执行同一件事、有一份白跑，却占着 CPU 与内存——相当于花两份钱干一份活。
+
+**为什么平时测不出来**：现代 CPU 主频 3GHz 以上，三条指令纳秒级完成，冲突窗口极小。想让冲突变得明显，有两种办法：**加大循环次数**（如从 5000 加到 50 万）或**在自增前后增加内存存取操作**，把三条指令的窗口拉长。
+
+> 锁分为两类：**系统锁**（操作系统自带：互斥锁、读写锁、自旋锁、文件锁等）与**软件锁**（MySQL 的行锁/表锁、Qt 的锁等应用层实现）。本章只讨论系统锁。
+
+### 12.2 互斥锁：pthread_mutex
+
+**互斥锁**的做法是在共享资源周围建立一个**临界区**，临界区具有**独占性**：同一时刻只允许一个线程进入，其他线程排队等待。
+
+> 类比卫生间：进去先敲门确认没人（请求锁）→ 进门锁门（上锁）→ 使用 → 开门离开（解锁）；里面有人时，后来者只能等待。
+
+![互斥锁流程：t1 上锁进入临界区保护 int var，t2 请求失败被挂起，t1 解锁后被唤醒重新竞争](images/12-mutex-flow.png)
+
+**互斥锁 API**：
+
+| 函数 | 作用 |
+|---|---|
+| `pthread_mutex_t lock;` | 互斥锁类型 |
+| `lock = PTHREAD_MUTEX_INITIALIZER;` | **静态初始化**（定义时直接赋值） |
+| `pthread_mutex_init(&lock, NULL);` | **动态初始化**（NULL 为默认属性，会申请内存） |
+| `pthread_mutex_destroy(&lock);` | 销毁释放（动态初始化的锁必须销毁） |
+| `pthread_mutex_lock(&lock);` | 上锁；已被占用则阻塞等待 |
+| `pthread_mutex_trylock(&lock);` | 非阻塞上锁；占用时立即返回失败，不等待 |
+| `pthread_mutex_unlock(&lock);` | 解锁 |
+
+- 锁**必须初始化后才能使用**，一般在创建线程之前完成；
+- 静态初始化写起来最简单，但如果放在头文件里被多个源文件引用，可能生成多把互斥的锁——需要跨文件共享时用动态初始化；
+- **多个线程保护同一个资源时，请求的必须是同一把锁**，一人一把锁等于没锁。
+
+**上锁位置的选择（锁粒度）**：以 50 万次自增为例，锁放在循环外只加/解一次，开销最小、结果正确，但两个线程无法交替执行（变成“一个人干完另一个再干”）；锁放在循环内每次自增都上锁解锁，能实现交替执行，但上锁解锁各 50 万次、系统调用开销极大，程序反而变慢。
+
+> 权衡原则：**锁只包住真正访问共享资源的代码**，不要把不相干的操作包进来；具体放循环内还是循环外，看需求——只要结果正确就不必追求交替，想看到交替就要接受开销。
+
+`mutex.c`——两个线程各对 `var` 加 500000 次，用互斥锁保护：
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<pthread.h>
+#include<sys/types.h>
+#include<sys/fcntl.h>
+#include<sys/stat.h>
+#include<string.h>
+
+#define number 500000
+
+int var;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void *t1(void * arg)
+{
+    pthread_detach(pthread_self());
+    for(int i = 0;i<number;i++)
+    {
+        pthread_mutex_lock(&lock);
+        printf("t1 0x%x ++var = %d\n",(unsigned int)pthread_self(),++var);
+        pthread_mutex_unlock(&lock);
+    }
+    pthread_exit(NULL);
+}
+
+void *t2(void * arg)
+{
+    pthread_detach(pthread_self());
+    for(int i = 0;i<number;i++)
+    {
+        pthread_mutex_lock(&lock);
+        printf("t2 0x%x ++var = %d\n",(unsigned int)pthread_self(),++var);
+        pthread_mutex_unlock(&lock);
+    }
+    pthread_exit(NULL);
+}
+
+int main(void)
+{
+    pthread_t tid;
+    //动态初始化锁
+    //pthread_mutex_init(&lock,NULL);
+    pthread_create(&tid,NULL,t1,NULL);
+    pthread_create(&tid,NULL,t2,NULL);
+
+    while(1)
+        sleep(1);//等待普通线程执行完毕
+
+    //释放动态锁
+    //pthread_mutex_destroy(&lock);
+
+    return 0;
+}
+```
+
+运行现象：两个线程交替打印递增的 `var`；去掉 `pthread_mutex_lock/unlock` 后，最终 `var` 会小于 1000000（每冲突一次少一），且每次运行结果可能不同。注意两个线程请求的是**同一把全局锁** `lock`。
+
+### 12.3 读写锁：pthread_rwlock
+
+互斥锁不论读写都只允许一个线程，资源利用率低：真实场景往往是**读多写少**，多个线程同时读并不冲突，只要没有人在写就行。
+
+> 类比餐厅菜单：全店只有一份菜单、每次只允许一桌看，其余 99 桌都要排队，显然不合理；把菜单挂在墙上（共享），所有人都能看；但修改菜品只能由店长一个人改（独占）。
+
+**读写锁的三个规则**：
+
+- **读共享**：多个线程可以同时持有读锁（读 + 读允许并发）；
+- **写独占**：写锁等同互斥锁，写时不允许其他线程读或写；
+- **读写互斥**：读时不能写、写时不能读；
+- 补充：**读锁数量有限**（如一千个），读锁耗尽后新的读者也要排队。
+
+![读写锁：读共享、写独占、读写互斥](images/12-rwlock.png)
+
+| 函数 | 作用 |
+|---|---|
+| `pthread_rwlock_t lock;` | 读写锁类型 |
+| `pthread_rwlock_init(&lock, NULL);` | 初始化读写锁 |
+| `pthread_rwlock_destroy(&lock);` | 销毁读写锁 |
+| `pthread_rwlock_rdlock(&lock);` | 请求读锁（读锁耗尽时阻塞） |
+| `pthread_rwlock_wrlock(&lock);` | 请求写锁（等同互斥锁） |
+| `pthread_rwlock_unlock(&lock);` | 解锁（读锁、写锁都用它） |
+
+`rwlock.c`——3 个写线程 + 5 个读线程共享访问全局变量：
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<pthread.h>
+#include<sys/fcntl.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<string.h>
+
+int var;
+pthread_rwlock_t lock;
+
+void *write_tb(void * arg)
+{
+    while(1)
+    {
+        pthread_rwlock_wrlock(&lock);
+        printf("write thread 0x%x,++var %d\n",(unsigned int)pthread_self(),++var);
+        pthread_rwlock_unlock(&lock);
+        usleep(300000);
+    }
+    pthread_exit(NULL);
+}
+
+void *read_tb(void * arg)
+{
+    while(1)
+    {
+        pthread_rwlock_rdlock(&lock);
+        printf("read thread 0x%x,var %d\n",(unsigned int)pthread_self(),var);
+        pthread_rwlock_unlock(&lock);
+        usleep(300000);
+    }
+    pthread_exit(NULL);
+}
+
+int main(void)
+{
+    pthread_t tid[8];
+    
+    int i;
+    pthread_rwlock_init(&lock,NULL);
+    for(i=0;i<3;i++)
+    {
+        pthread_create(&tid[i],NULL,write_tb,NULL);
+    }
+
+    for(i=3;i<8;i++)
+    {
+        pthread_create(&tid[i],NULL,read_tb,NULL);
+    }
+
+    while(i--)
+    {
+        pthread_join(tid[i],NULL);
+    }
+
+    pthread_rwlock_destroy(&lock);
+
+    return 0;
+}
+```
+
+运行现象：写线程之间互斥、写时读线程等待，但多个读线程可以同时打印同一个 `var`，读的吞吐量明显提升。若读线程不加读锁，写线程可能改到一半时被读到，**打印出脏数据、各线程结果不一致**。
+
+> 适用场景：日志分析、缓存读取等读多写少的场合；写操作很少时，读写锁比互斥锁效率高得多。
+
+### 12.4 进程间互斥锁（锁属性）
+
+默认的互斥锁作用域是**线程间**；多进程通过 `mmap` 共享内存共享数据时，同样需要加锁，否则一样冲突。做法是把锁也放进共享内存，并把锁属性从“线程互斥”改为“进程互斥”：
+
+```c
+pthread_mutexattr_t attr;                        // 互斥锁属性类型
+pthread_mutexattr_init(&attr);                   // 初始化为默认属性（线程间互斥）
+pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED); // 改为进程间互斥
+pthread_mutex_init(&lock, &attr);                // 初始化锁时使用自定义属性
+pthread_mutexattr_destroy(&attr);                // 属性用完释放
+```
+
+关键点：**初始化锁时必须传入自定义属性**，传 `NULL` 就还是默认的线程锁，前面改属性等于白改。
+
+![进程互斥锁：shared_t 随 mmap 映射文件 process lock map 共享，父子进程用同一把锁各加 5000 次](images/12-process-mutex.png)
+
+`process_lock.c`——父子进程通过 mmap 共享“变量 + 锁”的结构体，各加 5000 次：
+
+```c
+#include<stdio.h>
+#include<pthread.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/fcntl.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+#include<signal.h>
+#include<sys/mman.h>
+#include<sys/wait.h>
+
+typedef struct{
+    int var;
+    pthread_mutex_t lock;
+}shared_t;
+
+int main(void)
+{
+    int fd;
+    fd = open("process lock map",O_RDWR|O_CREAT,0664);
+    //拓展映射文件，拓展为shared_t大小
+    ftruncate(fd,sizeof(shared_t));
+    //声明设置互斥锁属性
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr,PTHREAD_PROCESS_SHARED);
+
+    //内存映射，创建共享内存
+    shared_t *ptr = NULL;
+    if((ptr = mmap(NULL,sizeof(shared_t),PROT_READ|PROT_WRITE,MAP_SHARED,fd,0)) == MAP_FAILED)
+    {
+        perror("mmap call failed");
+        exit(0);
+    }
+    //父进程初始化共享数据
+    ptr->var = 0;
+    pthread_mutex_init(&ptr->lock,&attr);
+    //创建子进程
+    pid_t pid;
+    pid = fork();
+    if(pid > 0)
+    {
+        for(int i =0;i<5000;i++)
+        {
+            pthread_mutex_lock(&ptr->lock);
+            printf("parent %d,++var %d\n",getpid(),++(ptr->var));
+            pthread_mutex_unlock(&ptr->lock);
+        }
+        pid_t zpid;
+        zpid = wait(NULL);
+        printf("parent wait sucess,zpid %d\n",zpid);
+    }
+    else if(pid == 0)
+    {
+        for(int i =0;i<5000;i++)
+        {
+            pthread_mutex_lock(&ptr->lock);
+            printf("child %d,++var %d\n",getpid(),++(ptr->var));
+            pthread_mutex_unlock(&ptr->lock);
+        }
+    }
+    else
+    {
+        perror("fork call failed");
+        exit(0);
+    }
+
+    return 0;
+}
+```
+
+要点：
+
+- `shared_t` 把“数据 + 锁”放在同一个共享映射里，父子进程看到的是同一把锁；只把变量放进共享内存、锁用默认线程锁，保护不了进程；
+- 锁的初始化必须在 `fork` 之前完成（子进程继承映射与锁状态）；
+- 运行现象：父子进程交替打印、最终 `var` 等于 10000；若去掉锁，结果会明显小于 10000，且**进程间冲突往往比线程间更明显**（进程调度开销更大，交错窗口更长）。
+
+### 12.5 文件读写锁：fcntl 与 struct flock
+
+文件锁本质上是**作用在文件上的读写锁**：读共享、写独占、读写互斥，用来让多个进程（或线程）安全地访问同一个文件。
+
+与内存锁不同，文件锁不是“定义一把锁再上锁”，而是**通过 `fcntl` 修改文件的锁属性**来实现：先定义一个新的 `struct flock` 并设置好成员，再用 `fcntl` 替换文件原有的锁描述。
+
+**`struct flock` 的五个成员**：
+
+| 成员 | 含义 |
+|---|---|
+| `l_type` | 锁类型：`F_RDLCK` 读锁、`F_WRLCK` 写锁、`F_UNLCK` 解锁（三选一） |
+| `l_whence` | 锁的起始基准：`SEEK_SET` 文件头、`SEEK_CUR` 当前位置、`SEEK_END` 文件尾 |
+| `l_start` | 相对 `l_whence` 的偏移量（不偏移传 0） |
+| `l_len` | 上锁长度；**传 0 表示锁定整个文件**，可只锁部分数据 |
+| `l_pid` | 当前持锁的进程 ID（由 `F_GETLK` 查询时返回） |
+
+![文件读写锁：struct flock 五个成员，A 对 flock.txt 持写锁 8 秒，B 阻塞至 A 解锁](images/12-file-lock.png)
+
+**`fcntl` 的三个锁命令**：
+
+| 命令 | 作用 |
+|---|---|
+| `F_GETLK` | 获取文件当前的锁信息（传出新 `struct flock`） |
+| `F_SETLK` | 设置/释放锁，**非阻塞**：锁被占用立即返回失败 |
+| `F_SETLKW` | 设置/释放锁，**阻塞**：锁被占用则等待（W = wait） |
+
+`flock.c`——对一个文件上写锁、保持 8 秒后解锁：
+
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<pthread.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<string.h>
+
+int main()
+{
+    struct flock old_flock,myflock;//文件锁结构体,old_flock用于保存旧的锁信息,myflock 用于保存新的锁信息
+    //尝试获取文件默认的锁属性
+    int fd;
+    if ((fd = open("flock.txt",O_RDWR)) == -1)
+        perror("open file failed");
+
+    fcntl(fd,F_GETLK,&old_flock);
+    printf("flock.txt lock_type is unlck\n");
+    //上写锁
+    myflock.l_type = F_WRLCK;
+    myflock.l_whence = SEEK_SET;
+    myflock.l_start = 0;
+    myflock.l_len = 0;
+    printf("pid %d 请求写锁\n",getpid());
+    fcntl(fd,F_SETLKW,&myflock);
+    printf("pid %d 请求写锁成功\n",getpid());
+    sleep(8);
+    myflock.l_type = F_UNLCK;
+    fcntl(fd,F_SETLKW,&myflock);
+    printf("pid %d 解锁成功\n",getpid());
+    exit(0);
+
+    return 0;
+}
+```
+
+验证方式：先建一个 `flock.txt`，在第一个终端运行本程序（上写锁后睡眠 8 秒）；8 秒内在第二个终端再运行一次，会看到第二个进程卡在“请求写锁”——基于 `F_SETLKW` 的阻塞等待，直到第一个进程解锁才继续。
+
+> 注意：文件锁是**建议性锁**（advisory lock）——只有主动调用 `fcntl` 加锁的进程才会受约束；不加锁直接读写文件的程序不受限制。
+
+### 12.6 自旋锁
+
+自旋锁的互斥性与互斥锁相同，**区别在等待方式**：
+
+- 互斥锁：锁被占用 → 线程**挂起**等待，让出 CPU；
+- 自旋锁：锁被占用 → 线程**忙等**（像“一直撞门”），持续申请锁，直到获取为止。
+
+> 自旋锁不让出 CPU，线程保持运行态反复尝试；而互斥锁的挂起/唤醒本身也需要时间（内核调度开销）。
+
+- **优点**：锁释放后能**立即获取**，没有唤醒延迟，锁的使用效率高；适用于**临界区极短**的场景；
+- **缺点**：等待期间持续占用 CPU，开销大；临界区较长时会造成大量 CPU 浪费；
+- 一般场景优先用互斥锁，自旋锁只在“锁持有时间极短、且不允许睡眠”的特殊场景使用。
+
+### 12.7 CAS 比较与交换：原子操作
+
+上锁/解锁都是系统调用，循环里频繁加锁会产生大量上下文切换开销。**CAS（Compare and Swap，比较与交换）** 是另一种思路——**乐观锁**：不加锁，依靠硬件原子指令完成“比较 + 更新”，多线程下也能安全高效地修改共享数据。
+
+**核心思想**：更新共享数据时，比较当前值与预期值：
+
+- 相等 → 说明没人动过，用新值替换；
+- 不相等 → 说明已被其他线程改过，放弃本次操作。
+
+| 元素 | 含义 |
+|---|---|
+| `V` | 内存位置的当前值 |
+| `A` | 预期的旧值（期望当前值） |
+| `B` | 要更新的新值 |
+
+![CAS 比较交换：V 与预期值 A 相等才写入 B，两线程各 5000 次原子加得到 10000](images/12-cas.png)
+
+**原子性**：整个“比较 + 交换”过程不可分割，不会被其他线程中断——需要硬件支持（原子指令 + 内存屏障）。
+
+**C 标准库提供的原子函数**：
+
+| 函数 | 作用 |
+|---|---|
+| `__sync_fetch_and_add(&n, 1)` | 原子加 1，**返回旧值**（类似 `n++`） |
+| `__sync_add_and_fetch(&n, 1)` | 原子加 1，**返回新值**（类似 `++n`） |
+| `__sync_fetch_and_sub(&n, 1)` | 原子减 1，返回旧值 |
+| `__sync_sub_and_fetch(&n, 1)` | 原子减 1，返回新值 |
+
+> 此外还有一批位运算的原子版本（与/或/异或等）；C++ 使用 `std::atomic` 系列。
+
+`cas.c`——两个线程各对全局变量原子加 5000 次，不使用锁：
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<pthread.h>
+#include<string.h>
+#include<sys/fcntl.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+
+#define num 5000
+
+int n;
+void *tb(void *arg)
+{
+    for(int i=0;i<num;i++)
+    {
+        __sync_fetch_and_add(&n,1);//原子操作，等价于n=n+1
+        printf("0x%x ++n %d\n",(unsigned int)pthread_self(),n);
+    }
+
+    pthread_exit(NULL);
+}
+
+int main()
+{
+    pthread_t tid;
+    pthread_create(&tid,NULL,tb,NULL);
+    pthread_create(&tid,NULL,tb,NULL);
+    while(1)
+        sleep(1);    
+
+    return 0;
+}
+```
+
+运行现象：最终 `n` 恰好等于 10000，无需加锁、也无需为每次自增支付上锁开销。
+
+> 局限：CAS 只能保证**单个变量的一次更新**是原子的；如果一段逻辑需要“先判断多个条件、再修改多个变量”，CAS 替代不了互斥锁。
+
+### 12.8 条件变量：线程的挂起与唤醒
+
+锁只能保证**互斥**（一次只一个线程访问），但控制不了**顺序**——谁先跑、谁后跑、谁该等。要按条件控制线程的执行顺序，就需要**条件变量**。
+
+> 类比仓库保安：两个保安一个白班、一个夜班，共用一间休息室。白天该白班巡逻、夜班在休息室挂起；到了晚上交班，巡逻完的人把对方叫醒（唤醒），对方去巡逻、自己进休息室。
+
+- **条件**：一个**全局变量**（如 `day`：1 表示白天、0 表示夜晚），两个线程都能看到、都需要判断；因为会被修改，所以**必须用互斥锁保护**；
+- **条件变量**：相当于“休息室/挂起点”，线程调 `wait` 就挂在这里；多个线程可以挂在同一个条件变量上；
+- **唤醒**：由另一个线程调用 `signal` / `broadcast` 把挂起的线程叫醒。
+
+> 信号量（Windows 常用）与条件变量能实现类似效果；Linux 多线程开发主要用条件变量。条件变量必须配合互斥锁使用。
+
+| 函数 | 作用 |
+|---|---|
+| `pthread_cond_t cd;` | 条件变量类型 |
+| `cd = PTHREAD_COND_INITIALIZER;` | 静态初始化 |
+| `pthread_cond_init(&cd, NULL);` | 动态初始化 |
+| `pthread_cond_destroy(&cd);` | 销毁 |
+| `pthread_cond_wait(&cd, &lock);` | 挂起当前线程（同时释放锁，被唤醒后重新上锁） |
+| `pthread_cond_signal(&cd);` | 唤醒**一个**挂在该条件变量上的线程 |
+| `pthread_cond_broadcast(&cd);` | 唤醒**所有**挂在该条件变量上的线程 |
+
+**wait 的锁语义（关键）**：调用 `pthread_cond_wait` 时，函数会**先释放互斥锁、再把线程挂起**；被其他线程唤醒后，它会**重新上锁**再返回。因此一次完整的等待包含：加锁 → wait（挂起并解锁）→ 被唤醒后重新加锁 → 处理 → 解锁。
+
+> 如果 wait 不释放锁，其他线程就无法修改条件、也无法发 signal，必然死锁——这是 wait 内部解锁的原因。
+
+**唤醒要防误判**：
+
+- `signal` 名义上只唤醒一个，但在多核环境下**可能唤醒多个**（设计早于多核时代的遗留行为）；
+- 如果条件判断用 `if`，被误唤醒的线程不会再检查条件，直接向下执行——例如“没饭也去吃饭”，会出现异常；
+- **正确写法：用 `while` 包住 wait**，被唤醒后重新判断条件，条件仍不满足就继续等。
+
+![条件变量：挂起点与 wait 的锁流程](images/12-condvar.png)
+
+**条件变量的数量**：按**工作条件的种类**划分，而不是每个线程一个。例如白班、夜班两种条件 → 两个条件变量（白班线程挂一个、夜班线程挂另一个），唤醒时不会叫错人。
+
+`cond.c`——两个保安（线程）白天 / 夜晚交替巡逻：
+
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<signal.h>
+#include<pthread.h>
+#include<string.h>
+
+int day;
+pthread_mutex_t lock;
+pthread_cond_t cd;
+
+void *ba1(void* arg)
+{
+    while(1)
+    {
+        pthread_mutex_lock(&lock);
+        if(day!=1)
+        {
+            //night
+            pthread_cond_wait(&cd,&lock);
+        }
+        else
+        {
+            //当前可以巡逻
+            printf("ba1执行巡逻任务\n");
+            --day;
+            pthread_cond_signal(&cd);
+        }
+        pthread_mutex_unlock(&lock);
+    }
+    pthread_exit(NULL);
+}
+
+void *ba2(void* arg)
+{
+    while(1)
+    {
+        pthread_mutex_lock(&lock);
+        if(day!=0)
+        {
+            //day
+            pthread_cond_wait(&cd,&lock);
+        }
+        else
+        {
+            //当前可以巡逻
+            printf("ba2执行巡逻任务\n");
+            ++day;
+            pthread_cond_signal(&cd);
+        }
+        pthread_mutex_unlock(&lock);
+    }
+    pthread_exit(NULL);
+}
+
+int main()
+{
+    pthread_t tid;
+    pthread_mutex_init(&lock,NULL);
+    pthread_cond_init(&cd,NULL);
+
+    pthread_create(&tid,NULL,ba1,NULL);
+    pthread_create(&tid,NULL,ba2,NULL);
+
+    while(1)
+        sleep(1);
+
+    return 0;
+}
+```
+
+解读：
+
+- `day` 是工作条件（全局变量），`lock` 保护它，`cd` 是挂起点；
+- ba1 在白班（day==1）巡逻，完成后 `--day` 并唤醒对方；ba2 在夜班（day==0）巡逻，完成后 `++day` 并唤醒对方——两人交替执行；
+- 本例用 `if` 简化了判断；工程代码建议写成 `while (day != 1) pthread_cond_wait(...)`，被误唤醒时会重新检查；
+- 两个 `destroy` 写在 `while(1)` 之后永远不会执行，演示程序可省略；实际程序应在退出前销毁锁与条件变量。
+
+> 另一个常见例子是生产者/消费者（厨师与顾客）：做好一碗饭只 `signal` 一个顾客；若错误地 `broadcast` 唤醒全部，没有饭的顾客也会去“吃饭”而报错——这正是必须 while 重判的原因。
+
+### 12.9 死锁：四个必要条件与预防
+
+**死锁**不是一种锁，而是一种异常现象：多个线程**互相等待对方持有的资源**，全部永久挂起、无法唤醒、无法继续执行。
+
+典型场景：两个数据 A、B 分别由 lock1、lock2 保护。T1 先拿 lock1，再申请 lock2；T2 先拿 lock2，再申请 lock1。两边都拿着一把、等另一把——形成环路，谁也无法推进。
+
+![死锁：交叉加锁形成的等待环路](images/12-deadlock.png)
+
+**死锁的四个必要条件**（同时满足才会死锁，破坏任意一个即可预防）：
+
+| 条件 | 含义 |
+|---|---|
+| 互斥条件 | 资源同一时刻只能被一个线程占用 |
+| 保持并请求 | 线程已持有部分资源，又去申请新资源 |
+| 不可剥夺 | 资源只能由持有者主动释放，别人抢不走 |
+| 循环等待 | 多个线程形成资源请求环路（A 等 B、B 等 A） |
+
+**检测与处理**：
+
+- 把“线程”看作点、“线程申请锁”看作有向边，**图中出现环路即已发生死锁**；
+- 发生后的应急处理：杀死其中一个线程，让它释放持有的锁，从而破环——只能治标，线程重新创建后还可能再次死锁。
+
+**预防为主**：
+
+- **按序加锁**：给资源编号，所有线程都按同一顺序申请（先 lock1 后 lock2），破坏循环等待；
+- **尝试加锁**：用 `pthread_mutex_trylock`，拿不到就释放已持有的锁并重试，避免“占着等”；
+- **减少嵌套**：能不持有多把锁就不持有，缩小锁的覆盖范围；
+- **一次性申请**：需要多个资源时先全部申请成功再开始工作。
+
+**死锁避免：银行家算法与安全序列**
+
+预防是在编码阶段静态地破坏四个必要条件；**避免**（avoidance）则是在**每次分配资源前动态判断**这次分配会不会把系统带进不安全状态——安全就分配，不安全就推迟：
+
+- **安全状态**：存在一种资源分配顺序，使所有线程都能按该顺序依次拿到所需资源并结束，这个顺序就是**安全序列**；只要系统处于安全状态，就一定不会死锁。
+- **不安全状态**：找不到任何安全序列，此时**不一定已死锁**，但继续分配就有陷入死锁的风险。
+- **银行家算法**：仿照银行放贷——银行不会把现金一次性全部放出，而是先确认放款后仍能满足所有客户的提款需求才放款。系统为每个线程记录「最大需求、已分配、还需」三组数据，分配前做一次试探性分配，再用安全性算法（反复寻找“还需量 ≤ 当前可用量”的线程，让它执行完并归还资源）检查是否仍存在安全序列；存在则正式分配，不存在则回滚试探分配、让申请方等待。
+
+代价是每次分配都要跑一遍安全性检查，开销大；因此实际工程更常用「按序加锁 + trylock」这类预防或检测手段，银行家算法主要用于理解“安全”与“不安全”的边界。
+
+**经典案例：哲学家就餐**
+
+5 位哲学家围坐圆桌，桌上 5 根筷子（每人左右各一根），规则是**拿到左右两根才能进餐**。如果 5 人同时拿起左手边的筷子，再一起等右手边的筷子——每根筷子都被占用、每个人都在等邻居放下，形成环路，全体永久挂起：这就是死锁的教科书场景。
+
+- 四个条件全部满足：筷子互斥（互斥）、拿着一根还等另一根（保持并请求）、别人抢不走（不可剥夺）、环环相扣（循环等待）；
+- **破环方案**：按序取筷（编号奇数先左后右、偶数先右后左，破坏循环等待）、限制同时进餐人数（如只允许 4 人、用信号量/服务员控制）、拿不到就放下重试（trylock 思路）、一次性申请两根再进餐。
+
+![哲学家就餐：循环等待导致的死锁](images/12-philosophers.png)
+
+### 12.10 本章小结
+
+| 技术 | 核心特性 | 典型场景 | 主要开销 / 风险 |
+|---|---|---|---|
+| 互斥锁 | 一个线程独占临界区 | 通用共享数据保护 | 阻塞唤醒开销；锁粒度不好会拖慢并发 |
+| 读写锁 | 读共享、写独占 | 读多写少（日志、缓存） | 写线程可能饥饿；实现比互斥锁重 |
+| 进程互斥锁 | 锁放共享内存，跨进程生效 | mmap 共享数据的多进程 | 需同时共享数据与锁；属性必须改对 |
+| 文件读写锁 | 用 fcntl 锁文件 | 多进程共享文件 | 建议性锁；阻塞/非阻塞需选对 |
+| 自旋锁 | 忙等不挂起 | 极短临界区 | 持续占 CPU；长临界区性能差 |
+| CAS 原子操作 | 硬件原子更新，无需加锁 | 计数器、标志位等单变量 | 只能保证单个变量的一次更新 |
+| 条件变量 | 按条件挂起 / 唤醒 | 线程顺序控制、生产者消费者 | 必须配锁；误唤醒需 while 重判 |
+
+选择思路：先判断**保护的是什么**（内存变量 / 跨进程共享内存 / 文件）→ 再看**读写比例**（读多用读写锁）→ 再看**临界区长短**（极短可考虑自旋锁）→ 若只是**单变量加减**，优先考虑 CAS；需要**控制执行顺序**时用条件变量。
 
 ## 附录
 
@@ -3047,6 +4243,27 @@ gcc x.c -lpthread -o app    # -lpthread 放在 -o 之前，否则报未定义引
 | `sigismember` | `int sigismember(sigset_t *set, int signo);` | 查看信号集中 signo 信号的位码并返回（0 或 1） |
 | `sigprocmask` | `int sigprocmask(int how, sigset_t *set, sigset_t *oldset);` | 设置/替换进程屏蔽字；how 传 `SIG_SETMASK` 覆盖替换 |
 | `sigpending` | `int sigpending(sigset_t *set);` | 获取当前进程未决信号集并传出 |
+| `pthread_create` | `int pthread_create(pthread_t *tid, const pthread_attr_t *attr, void *(*fn)(void *), void *arg);` | 创建线程；成功 0、失败错误号；第一参数需传 `&tid` |
+| `pthread_self` | `pthread_t pthread_self(void);` | 获取调用线程自身的 tid |
+| `pthread_join` | `int pthread_join(pthread_t tid, void **reval);` | 阻塞回收线程并接收返回值；不回收 → TCB 残留（僵线程） |
+| `pthread_detach` | `int pthread_detach(pthread_t tid);` | 设置分离态；分离线程退出自动回收、无返回值 |
+| `pthread_cancel` | `int pthread_cancel(pthread_t tid);` | 取消线程；目标需有取消点；回收值为 -1 |
+| `pthread_testcancel` | `void pthread_testcancel(void);` | 制造一个取消点，无其他功能 |
+| `pthread_exit` | `void pthread_exit(void *reval);` | 退出当前线程，不影响进程；参数需强转 |
+| `pthread_attr_init` / `pthread_attr_destroy` | `int pthread_attr_init(pthread_attr_t *attr);` | 初始化（默认属性）/ 销毁线程属性 |
+| `pthread_attr_setdetachstate` / `pthread_attr_getdetachstate` | `int pthread_attr_setdetachstate(pthread_attr_t *attr, int state);` | 设置 / 获取退出状态（分离 / 回收） |
+| `pthread_attr_setstack` | `int pthread_attr_setstack(pthread_attr_t *attr, void *stackaddr, size_t stacksize);` | 自定义线程栈地址与大小 |
+| `pthread_mutex_init` / `pthread_mutex_destroy` | `int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a);` | 初始化 / 销毁互斥锁；静态初始化用 `PTHREAD_MUTEX_INITIALIZER` |
+| `pthread_mutex_lock` / `pthread_mutex_unlock` | `int pthread_mutex_lock(pthread_mutex_t *m);` | 上锁（阻塞等待）/ 解锁 |
+| `pthread_mutex_trylock` | `int pthread_mutex_trylock(pthread_mutex_t *m);` | 非阻塞上锁，占用时立即返回失败 |
+| `pthread_mutexattr_init` / `pthread_mutexattr_setpshared` / `pthread_mutexattr_destroy` | `int pthread_mutexattr_setpshared(pthread_mutexattr_t *a, int pshared);` | 锁属性：初始化为线程锁；`PTHREAD_PROCESS_SHARED` 改为进程间互斥 |
+| `pthread_rwlock_init` / `pthread_rwlock_destroy` | `int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *a);` | 初始化 / 销毁读写锁 |
+| `pthread_rwlock_rdlock` / `pthread_rwlock_wrlock` / `pthread_rwlock_unlock` | `int pthread_rwlock_rdlock(pthread_rwlock_t *l);` | 请求读锁（共享）/ 请求写锁（独占）/ 解锁 |
+| `pthread_cond_init` / `pthread_cond_destroy` | `int pthread_cond_init(pthread_cond_t *c, const pthread_condattr_t *a);` | 初始化 / 销毁条件变量；静态初始化用 `PTHREAD_COND_INITIALIZER` |
+| `pthread_cond_wait` | `int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m);` | 挂起当前线程（内部先释放锁，唤醒后重新加锁） |
+| `pthread_cond_signal` / `pthread_cond_broadcast` | `int pthread_cond_signal(pthread_cond_t *c);` | 唤醒一个 / 唤醒所有挂在该条件变量上的线程 |
+| `__sync_fetch_and_add` / `__sync_add_and_fetch` | `type __sync_fetch_and_add(type *ptr, type value);` | 原子加：分别返回旧值 / 新值（减、位运算有对应版本） |
+| `fcntl` | `int fcntl(int fd, int cmd, ... struct flock *);` | `F_GETLK` 查锁 / `F_SETLK` 非阻塞上下锁 / `F_SETLKW` 阻塞上下锁 |
 | `WIFEXITED` / `WEXITSTATUS` | 宏 | 是否正常退出 / 取退出码 |
 | `WIFSIGNALED` / `WTERMSIG` | 宏 | 是否被信号杀死 / 取信号编号 |
 | `pipe` | `int pipe(int fds[2]);` | 创建匿名管道；fds[0] 读端、fds[1] 写端（先 pipe 再 fork，只限亲缘进程间通信） |
@@ -3100,6 +4317,16 @@ gcc x.c -lpthread -o app    # -lpthread 放在 -o 之前，否则报未定义引
 - **信号屏蔽后进程无反应**：确认屏蔽字设置是否正确（sigaddset 传的是信号名）；用 sigpending 查未决信号集，确认信号是否已抵达并被阻塞；
 - **SIGCHLD 回收漏收**：捕捉函数内必须循环 `waitpid(-1, NULL, WNOHANG)` 直到返回 0/-1——SIGCHLD 不排队，只回收一次会残留僵尸；
 - **信号 IPC 首包杀死子进程**：父进程 fork 后立即发信号，子进程可能尚未完成捕捉设定——fork 前先屏蔽该信号（子进程继承屏蔽），子进程捕捉设定完成后再解除屏蔽；
+- **主线程提前退出**：main 结束 → 进程终止 → 所有线程关闭；多线程程序的主线程必须最后退出（用 join 或循环等待）；
+- **pthread_cancel 无效**：目标线程内没有取消点——用 pthread_testcancel 或在循环中调用系统调用制造取消点；
+- **join 分离线程失败**：分离态线程自动回收、不保留返回值，不能再 join；回收→分离不可逆；
+- **线程返回值用 -1**：与“被取消”的回收值 -1 冲突、无法区分；改用其他返回码；
+- **自定义线程栈过小**：线程栈溢出导致崩溃，并触发 SIGBUS 杀死进程——不要盲目减小栈；
+- **多线程计数结果偏小/每次不同**：共享变量未加锁，指令穿插导致丢失更新——用互斥锁保护读写；
+- **加了锁仍出错**：多个线程各自定义了一把锁（不是同一把），或锁初始化晚于线程创建——全局只定义一把锁，创建线程前初始化；
+- **进程间加锁无效**：锁没放在共享内存中，或没设置 `PTHREAD_PROCESS_SHARED`——数据与锁都放映射区，初始化锁时传自定义属性；
+- **条件变量卡死或误执行**：wait 前必须已上锁、挂起时由 wait 内部释放；被唤醒后应用 while 重新判断条件，避免误唤醒后直接执行；
+- **死锁（线程全部卡死）**：多个线程交叉加锁形成环路——统一加锁顺序，或用 trylock 失败后释放重试；
 - **mmap 映射失败**：检查两点——映射权限是否 ≤ open 权限；映射大小是否 ≤ 文件大小（超出会触发 SIGBUS 总线错误）；
 - **open 管道文件阻塞**：命名管道要凑齐读、写两个权限才能打开——先跑写端会卡在 open 是正常现象，等读端跑起来就通了；
 - **vim 交换文件**：编辑时提示 .swp 是上次异常退出留下的——按 `R` 恢复内容，或删除该 .swp 后重新打开；写代码**勤保存**（写一段保存一下），防止意外关闭丢失代码；
