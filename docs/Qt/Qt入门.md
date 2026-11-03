@@ -1,17 +1,16 @@
-# Qt 入门
 Qt 是一个**跨平台的 C++ 应用程序开发框架**，可用于 Windows、Linux、macOS、Android、iOS 等系统。除了 GUI 组件，它还提供网络、数据库、XML、多线程等模块，适合桌面、嵌入式以及部分移动端应用开发。
 
 本章围绕三个核心主题展开，帮助读者从零开始建立对 Qt 工程结构、调试手段和对象通信机制的系统认知。
 
 ---
 
-## 1. 建立工程 (Project Creation)
+# 1. 建立工程 (Project Creation)
 Qt 工程按界面类型可分为两大类：**Console Application**（控制台程序）和 **Widget Application**（窗口程序）。两者的核心差异在于是否加载 GUI 模块。
 
-### 1.1 Console Application
+## 1.1 Console Application
 控制台程序不依赖图形界面，适用于后台服务、命令行工具或算法验证场景。
 
-#### 项目文件（ConsoleApp.pro）
+### 项目文件（ConsoleApp.pro）
 ```plain
 QT -= gui
 CONFIG += c++11 console
@@ -28,7 +27,7 @@ SOURCES += main.cpp
 + `CONFIG -= app_bundle`
     - 在 macOS 上不生成 `.app` 包，直接输出可执行文件
 
-#### 入口代码（main.cpp）
+### 入口代码（main.cpp）
 ```cpp
 #include <QCoreApplication>
 #include<iostream>
@@ -66,7 +65,7 @@ int main(int argc, char *argv[])
 3. 收到退出请求后，`exec()` 返回进程退出码。
 4. `main()` 返回前，局部应用对象自动析构并完成相应清理。窗口程序还会在进入事件循环前创建业务对象、建立信号槽连接并显示顶层窗口。
 
-#### 命令行参数示例
+### 命令行参数示例
 假设可执行文件为 `ConsoleApp.exe`，在终端执行：
 
 ```bash
@@ -86,10 +85,10 @@ argv:world
 
 ---
 
-### 1.2 Widget Application
+## 1.2 Widget Application
 窗口程序加载了完整的 GUI 模块，可以使用 Qt 提供的全部可视化组件。
 
-#### 项目文件（WidgetApp.pro）
+### 项目文件（WidgetApp.pro）
 ```plain
 QT += core gui
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
@@ -112,7 +111,7 @@ FORMS += form.ui mainwindow.ui
     - `QApplication` 继承自 `QCoreApplication`，在其基础上增加了**图形界面管理**能力
     - 窗口程序的 `main()` 函数使用 `QApplication`，控制台程序使用 `QCoreApplication`
 
-#### 入口代码（main.cpp）
+### 入口代码（main.cpp）
 ```cpp
 #include "mainwindow.h"
 #include "form.h"
@@ -138,15 +137,15 @@ int main(int argc, char *argv[])
 
 ---
 
-## 2. 了解各个文件 (Project Files)
+# 2. 了解各个文件 (Project Files)
 一个典型的 Qt Widget 工程包含三类文件：**工程文件**（`.pro`）、**头文件与源文件**（`.h` / `.cpp`）和**界面文件**（`.ui`）。理解它们各自的角色与协作关系，是掌握 Qt 开发的基础。
 
-### 2.1 工程文件 (.pro)
+## 2.1 工程文件 (.pro)
 `.pro` 文件是 **qmake** 构建系统的核心配置，它告诉编译器"用哪些模块、编译哪些文件"。
 
 > **现代 Qt 补充**：`.pro` / qmake 仍常见于既有工程和教学示例。Qt 6 新项目通常优先使用 CMake；两者都负责组织构建，MOC、UIC、编译器和链接器的基本协作关系不变。
 
-#### 对比 ConsoleApp.pro 与 WidgetApp.pro
+### 对比 ConsoleApp.pro 与 WidgetApp.pro
 | 配置项 | ConsoleApp.pro（控制台） | WidgetApp.pro（窗口） |
 | :--- | :--- | :--- |
 | `QT` | `-= gui`（移除图形模块） | `+= core gui`（添加核心+图形） |
@@ -160,7 +159,7 @@ int main(int argc, char *argv[])
     - `qmake` 读取 `.pro` 文件 → 生成 `Makefile` → 调用编译器（gcc/msvc/clang）进行编译
     - `.pro` 中的每一行都是 qmake 的**变量赋值**或**条件判断**
 
-#### 常见 .pro 关键字速查
+### 常见 .pro 关键字速查
 | 关键字 | 说明 |
 | :--- | :--- |
 | `QT += / -=` | 添加/移除 Qt 模块（如 `core`、`gui`、`widgets`、`network`） |
@@ -173,7 +172,7 @@ int main(int argc, char *argv[])
 | `TARGET` | 指定生成的可执行文件名称 |
 
 
-#### 弃用 API 检查
+### 弃用 API 检查
 
 `.pro` 可以通过预处理宏在编译期阻止使用指定版本之前已经废弃的 Qt API：
 
@@ -185,7 +184,7 @@ int main(int argc, char *argv[])
 
 取消最后一行的注释即可启用检查。版本值应与项目的目标 Qt 版本相匹配；在较旧的 Qt 环境中启用面向 Qt 6 的限制，可能暴露较多兼容性问题。
 
-#### 条件部署规则
+### 条件部署规则
 
 ```qmake
 # Default rules for deployment.
@@ -214,7 +213,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 ---
 
-### 2.2 mainwindow (头文件与源文件)
+## 2.2 mainwindow (头文件与源文件)
 头文件定义了窗口类的结构，源文件实现了具体逻辑。以 `mainwindow.h` 为例：
 
 ```cpp
@@ -249,13 +248,13 @@ private:
 };
 ```
 
-#### Q_OBJECT 宏
+### Q_OBJECT 宏
 + **核心作用**：`Q_OBJECT` 让类拥有由 MOC 生成的元对象信息和调度代码。
 + **需要它的典型场景**：类要声明自定义信号、使用 `Q_PROPERTY`、运行时元对象查询、传统字符串式槽查找或其他依赖元对象的能力。
 + **不必机械添加**：仅仅调用 `connect()`、接收已有信号，或把普通成员函数、函数对象、Lambda 作为接收端，并不意味着该类必然需要 `Q_OBJECT`。
 + **放置位置**：通常紧跟类声明的左花括号，便于工具识别和读者定位；它不要求从文件物理意义上的“第一行”开始。
 
-#### MOC 编译流程
+### MOC 编译流程
 ```plain
 mainwindow.h (含 Q_OBJECT)
        │
@@ -280,7 +279,7 @@ mainwindow.h (含 Q_OBJECT)
     - `QMetaObject`：存储类的元信息（信号名、槽名、属性列表等）
     - `QMetaEnum` / `QMetaProperty`：枚举和属性的反射接口
 
-#### signals 与 slots 关键字
+### signals 与 slots 关键字
 | 关键字 | 说明 | 访问修饰符 |
 | :--- | :--- | :--- |
 | `signals:` | 声明**信号**函数 | 信号可参与连接；通常由所属类在合适的业务时机发射 |
@@ -290,7 +289,7 @@ mainwindow.h (含 Q_OBJECT)
 
 + _注意：_ 信号函数通常只需声明，MOC 负责生成所需实现；槽函数本质上是普通可调用函数，需要提供实现。使用新式连接时，接收端并不强制写在 `slots` 区域，普通成员函数和 Lambda 同样可以作为槽。
 
-#### Ui 命名空间与 ui 指针
+### Ui 命名空间与 ui 指针
 ```cpp
 private:
     Ui::MainWindow *ui;  // 定义主界面的指针
@@ -301,10 +300,10 @@ private:
 
 ---
 
-### 2.3 UI界面文件 (.ui)
+## 2.3 UI界面文件 (.ui)
 `.ui` 文件是 Qt Designer 生成的 **XML 格式**界面描述文件，记录了窗口的布局、组件和预设连接。
 
-#### .ui 文件的核心结构
+### .ui 文件的核心结构
 ```xml
 <ui version="4.0">
   <class>MainWindow</class>
@@ -351,7 +350,7 @@ private:
 + `QMenuBar` 可以包含 `QMenu`，菜单通过 `addaction` 引用 `QAction`；同一个动作还可以复用于工具栏或快捷键。
 + `QStatusBar` 对应 `QMainWindow` 的状态栏区域。
 
-#### UIC 工具的作用
+### UIC 工具的作用
 ```plain
 mainwindow.ui (XML)
        │
@@ -377,7 +376,7 @@ mainwindow.ui (XML)
 
 *图：`.ui` 是设计描述，`ui_*.h` 是生成代码，`MainWindow` 保存业务逻辑并组合 `Ui::MainWindow`；不要手工修改自动生成的头文件。*
 
-#### Designer 中的信号槽连接
+### Designer 中的信号槽连接
 `.ui` 文件的 `<connections>` 标签可以在 Qt Designer 中通过**拖拽连线**的方式建立信号槽连接：
 
 ```xml
@@ -405,13 +404,13 @@ mainwindow.ui (XML)
 
 ---
 
-## 3. 调试输出 (Debug Output)
+# 3. 调试输出 (Debug Output)
 在 Qt 开发中，有三种常用的调试输出方式：**qDebug**（控制台输出）、**QString**（格式化字符串）和 **QMessageBox**（弹窗提示）。
 
-### 3.1 qDebug
+## 3.1 qDebug
 `qDebug()` 是 Qt 提供的**调试信息输出流**，用法类似于 `cout`，但专为 Qt 类型优化。
 
-#### 基本用法
+### 基本用法
 ```cpp
 // qDebug()<<== cout<<
 qDebug()<<"我点击了按钮";
@@ -421,7 +420,7 @@ qDebug()<<"pp:"<<pp;
 qDebug()<<"slots_ctrlInput(int)"<<state;
 ```
 
-#### qDebug 与 cout 对比
+### qDebug 与 cout 对比
 | 特性 | `qDebug()` | `cout` |
 | :--- | :--- | :--- |
 | 头文件 | `<QDebug>` (Qt) | `<iostream>` (STL) |
@@ -438,10 +437,10 @@ qDebug()<<"slots_ctrlInput(int)"<<state;
 
 ---
 
-### 3.2 QString
+## 3.2 QString
 **QString** 是 Qt 对字符串的封装类，提供了远比 `std::string` 丰富的操作接口。以下按常用操作逐一讲解。
 
-#### 初始化与基本操作
+### 初始化与基本操作
 ```cpp
 QString qstr="123";
 ```
@@ -449,7 +448,7 @@ QString qstr="123";
 + 支持直接用字符串字面量赋值
 + 内部使用 **Unicode（UTF-16）** 编码，天然支持中文等多语言字符
 
-#### QString ↔ std::string ↔ const char* 转换
+### QString ↔ std::string ↔ const char* 转换
 ```cpp
 QString qstr="123";
 
@@ -480,7 +479,7 @@ qDebug()<<"qstr:"<<qstr;
     - 在 Windows 的 MSVC 编译器中，如果源文件编码不是 UTF-8，中文输出可能乱码
     - _原因_：MSVC 默认使用系统本地编码（GBK），而 `QString` 内部为 UTF-16
 
-#### sprintf 格式化
+### sprintf 格式化
 ```cpp
 //sprintf()
 qstr.sprintf("%d-%c-%s", 456, 'a', pp);
@@ -491,7 +490,7 @@ qDebug()<<"qstr:"<<qstr;
 + `sprintf()` 用法与 C 语言的 `sprintf` 完全一致
 + _注意：_ `QString::sprintf()` 在后期 Qt 5 中已被弃用，并在 Qt 6 中移除；新代码优先使用 `arg()`、`asprintf()` 或其他类型安全的格式化方式。
 
-#### arg() 格式化替换
+### arg() 格式化替换
 `arg()` 是 Qt 特有的格式化方法，使用 `%数字` 作为占位符：
 
 ```cpp
@@ -505,7 +504,7 @@ qDebug()<<"qstr:"<<qstr;
 + 基本用法：`%1`、`%2`、`%3` ... 依次对应每次 `arg()` 调用的参数
 + `arg()` 支持多种类型：`int`、`double`、`char`、`QString` 等
 
-#### arg() 的高级行为
+### arg() 的高级行为
 ```cpp
 //数字从小到大依次进行替换，替换%后的数字最多两位
 qstr=QString("%23 %6  %789").arg(44).arg("qwer").arg('o');
@@ -527,7 +526,7 @@ qDebug()<<"qstr:"<<qstr;
     - `.arg("qwer")` → 替换下一个最小编号 `%23` → `qwer 44  %789`
     - `.arg('o')` → 替换下一个最小编号 `%78` → `qwer 44  o9`
 
-#### indexOf() 子串查找
+### indexOf() 子串查找
 ```cpp
 //indexOf():查找子串，找到则返回子串开始位置，没找到返回-1
 qstr="12345678";
@@ -540,7 +539,7 @@ qDebug()<<"ab index:"<<qstr.indexOf("ab");
 + 找到子串：返回子串**首次出现**的起始索引（从 0 开始）
 + 未找到：返回 `-1`
 
-#### split() 字符串分割
+### split() 字符串分割
 ```cpp
 //按要求分割字符串
 qstr="wo shi yi ge lao shi";
@@ -563,7 +562,7 @@ shi
 + 支持范围 for 循环遍历
 + **关键词**：QStringList 是 `QList<QString>` 的便捷别名，支持 `append()`、`join()`、`filter()` 等列表操作
 
-#### QString 拼接方式速查
+### QString 拼接方式速查
 | 方式 | 示例 | 说明 |
 | :--- | :--- | :--- |
 | `+` | `qstr = a + b` | 生成新字符串，不修改原串 |
@@ -574,10 +573,10 @@ shi
 
 ---
 
-### 3.3 QMessageBox
+## 3.3 QMessageBox
 **QMessageBox** 提供了四种标准弹窗，用于向用户展示信息或获取确认。
 
-#### 四种标准弹窗
+### 四种标准弹窗
 ```cpp
 // 信息弹窗
 QMessageBox::information(this, "标题", "这是一条普通信息");
@@ -611,17 +610,17 @@ if(btn == QMessageBox::Yes) {
 
 ---
 
-## 4. 信号与槽 (Signals & Slots)
+# 4. 信号与槽 (Signals & Slots)
 **信号与槽**（Signals & Slots）是 Qt 的核心通信机制，用于对象之间的松耦合协作。发送者只描述“发生了什么”，连接记录决定通知哪些接收端；接收端专注于响应逻辑。这种设计与观察者模式相似，同时还整合了对象生命周期和事件循环。
 
 ![发送者、信号、连接、槽与跨窗口数据流](assets/03-flowchart-qt-signal-slot-dataflow.png)
 
 *图：连接把信号路由到兼容的槽；直接连接立即调用，队列连接则把调用投递到接收者所在线程的事件循环。*
 
-### 4.1 快速添加信号槽
+## 4.1 快速添加信号槽
 Qt 提供了三种快速建立信号槽连接的方式，从最简单到最灵活依次排列。
 
-#### 方式一：自动连接（命名规则）
+### 方式一：自动连接（命名规则）
 Qt 的 **UIC 工具**会根据槽函数的命名规则，自动建立信号与槽的连接，无需手动编写 `connect()` 语句。
 
 ```cpp
@@ -643,7 +642,7 @@ void MainWindow::on_pb_outtext_clicked()
     - 槽函数必须声明在 `private slots:`、`public slots:` 或 `protected slots:` 区域
     - 自动连接**不受访问修饰符限制**
 
-#### 方式二：Qt Designer 可视化连接
+### 方式二：Qt Designer 可视化连接
 在 Qt Designer 中，可以通过**拖拽连线**的方式建立信号槽连接，连接信息保存在 `.ui` 文件的 `<connections>` 标签中：
 
 ```xml
@@ -667,7 +666,7 @@ void MainWindow::on_pb_outtext_clicked()
 + _注意：_ Designer 连接**只能**连接已存在的槽函数（包括 Qt 内置槽和自定义槽）
 + 这些连接在 `setupUi()` 执行时自动生效
 
-#### 方式三：UI 组件直接连接
+### 方式三：UI 组件直接连接
 两个 UI 组件之间可以直接通过 `connect()` 建立连接，无需经过中间槽函数：
 
 ```cpp
@@ -682,10 +681,10 @@ QObject::connect(ui->horizontalSlider, SIGNAL(valueChanged(int)),
 
 ---
 
-### 4.2 自定义信号槽
+## 4.2 自定义信号槽
 当自动连接和 Designer 连接无法满足需求时，需要手动定义信号和槽，并通过 `connect()` 建立绑定。
 
-#### 定义信号
+### 定义信号
 ```cpp
 signals:
     //一个关键字修饰，不要加访问修饰符
@@ -697,7 +696,7 @@ signals:
     - MOC 编译器会自动生成信号函数的实现代码
     - 当信号被发射时，Qt 会遍历有效连接：直接连接立即调用接收端，队列连接则把调用投递到接收者线程的事件循环
 
-#### 定义槽函数
+### 定义槽函数
 ```cpp
 public slots:
     //手动定义槽函数
@@ -711,7 +710,7 @@ public slots:
 + 槽需要的参数不能多于信号提供的参数，对应参数类型必须兼容；槽可以省略信号末尾的参数。
 + 槽函数的返回类型通常为 `void`（返回值在信号槽机制中会被忽略）
 
-#### 手动绑定连接（SIGNAL/SLOT 宏方式）
+### 手动绑定连接（SIGNAL/SLOT 宏方式）
 ```cpp
 //信号：stateChanged(int)
 //手动绑定链接
@@ -747,7 +746,7 @@ QObject::connect(
     - _底层机制_：`connect()` 在运行时通过字符串匹配，在发送者和接收者的**元对象**（`QMetaObject`）中查找对应的函数索引
 + _注意：_ 如果信号和槽的参数类型不匹配，`connect()` 会在控制台输出**运行时警告**（不会编译报错）
 
-#### 槽函数实现
+### 槽函数实现
 ```cpp
 void MainWindow::slots_ctrlInput(int state){
     qDebug()<<"slots_ctrlInput(int)"<<state;
@@ -803,7 +802,7 @@ void MainWindow::slots_ctrlTime(int val)
 
 ---
 
-### 4.3 主动触发（发射）信号
+## 4.3 主动触发（发射）信号
 `emit` 是用于标示信号发射位置的 Qt 宏。
 
 + 语法格式：`emit 信号名(实际参数);`
@@ -840,10 +839,10 @@ void MainWindow::onProcessFinished() {
 
 ---
 
-### 4.4 信号与槽的对应关系
+## 4.4 信号与槽的对应关系
 信号与槽之间存在四种对应关系：
 
-#### 四种关系
+### 四种关系
 | 关系 | 说明 | 示例 |
 | :--- | :--- | :--- |
 | **一对一** | 一个信号连接一个槽 | 按钮 `clicked()` → 自定义槽函数 |
@@ -854,7 +853,7 @@ void MainWindow::onProcessFinished() {
 
 > **理解边界**：`connect()` 的源端必须是信号，不能把普通槽函数直接当成信号源；普通函数之间当然仍可使用常规 C++ 调用。
 
-#### 一对多示例
+### 一对多示例
 下面让滑块同时连接进度条和时间显示：
 
 ```cpp
@@ -870,7 +869,7 @@ QObject::connect(ui->horizontalSlider, SIGNAL(valueChanged(int)),
 + 同一个 `valueChanged(int)` 信号被连接到了两个不同的槽
 + 当滑块值改变时，进度条和时间**同时**更新
 
-#### 信号连接信号
+### 信号连接信号
 ```cpp
 //主窗口spinbox组件和主窗口本身的signals_transNum信号进行连接
 //void valueChange(int)->void signals_transNum(int num);
@@ -883,7 +882,7 @@ QObject::connect(ui->spinBox, SIGNAL(valueChanged(int)),
 + `SIGNAL()` 宏可以出现在 `connect()` 的**第四个参数**位置，用目标信号代替 `SLOT()`；第三个参数仍是接收对象
 + _底层机制_：信号连接信号时，当源信号被发射，MOC 会"转发"调用目标信号，再由目标信号触发其已连接的槽
 
-#### 跨窗口信号传递
+### 跨窗口信号传递
 ```cpp
 // main.cpp
 QObject::connect(&w, SIGNAL(signals_transNum(int)),
@@ -906,10 +905,10 @@ void Form::slots_showNum(int num) {
 
 ---
 
-### 4.5 信号槽断开连接
+## 4.5 信号槽断开连接
 使用 `disconnect()` 可以断开已建立的信号槽连接。
 
-#### disconnect() 的用法
+### disconnect() 的用法
 ```cpp
 // 断开特定连接
 QObject::disconnect(ui->horizontalSlider, SIGNAL(valueChanged(int)),
@@ -929,7 +928,7 @@ QObject::disconnect(ui->horizontalSlider, 0, ui->progressBar, 0);
 | `disconnect(发送者, 0, 接收者, 0)` | 断开发送者与接收者之间的**所有**连接 |
 
 
-#### 何时需要断开
+### 何时需要断开
 + **QObject 自动清理**：`QObject` 销毁时会自动移除以它为发送者或接收者的连接，因此普通对象间连接通常不需要在析构前手动断开。
 + **函数对象的上下文**：连接到捕获外部状态的 Lambda 时，应提供合适的 context object；上下文销毁后连接会自动失效，避免捕获内容悬空。
 + **临时禁用响应**：在某些业务场景中需要临时屏蔽信号响应
@@ -937,10 +936,10 @@ QObject::disconnect(ui->horizontalSlider, 0, ui->progressBar, 0);
 + **动态切换逻辑**：根据运行状态切换不同的槽函数
     - 先 `disconnect` 旧槽，再 `connect` 新槽
 
-### 4.6 Qt5 新式连接语法（补充）
+## 4.6 Qt5 新式连接语法（补充）
 Qt 5 引入的**新语法（基于函数指针）** 彻底改变了信号和槽的绑定方式。它抛弃了宏（`SIGNAL` 和 `SLOT`），直接使用 C++ 的成员函数指针，从而实现了编译期的类型检查。
 
-#### 新语法调用格式
+### 新语法调用格式
 除了使用 `SIGNAL()`/`SLOT()` 宏方式，Qt5 引入了**函数指针**方式，对应旧语法的 `connect(发送者, SIGNAL(信号), 接收者, SLOT(槽))`，新语法的标准格式如下：
 
 ```cpp
@@ -959,8 +958,8 @@ connect(发送者指针, &发送者类名::信号名, 接收者指针, &接收�
 
 ---
 
-#### 具体示例
-##### 示例 A：基础绑定（替代旧语法）
+### 具体示例
+#### 示例 A：基础绑定（替代旧语法）
 假设你有一个输入框 `m_searchBox`，当文本改变时，触发主窗口的 `onSearchChanged` 槽函数。
 
 **旧语法：**
@@ -978,7 +977,7 @@ connect(m_searchBox, &QLineEdit::textChanged, this, &MainWindow::onSearchChanged
 
 _注：新语法不需要在宏字符串中重复参数类型。只要信号参数能够满足槽所需参数，编译器就能检查连接；槽可以忽略信号末尾的参数。_
 
-##### 示例 B：绑定到 Lambda 表达式（新语法）
+#### 示例 B：绑定到 Lambda 表达式（新语法）
 新语法最强大的地方在于它允许你直接把一段简短的代码块（Lambda）作为槽函数，而不需要在头文件里专门声明一个 `private slot:`。
 
 ```cpp
@@ -991,7 +990,7 @@ connect(ui->btnSubmit, &QPushButton::clicked, this, [this]() {
 
 _注：传入 _`this`_ 作为上下文对象（Context Object）非常重要。这意味着当 _`this`_（当前窗口）被销毁时，这个 Lambda 连接会自动断开，防止发生“野指针”崩溃。_
 
-##### 示例 C：处理重载信号（Overloaded Signals）
+#### 示例 C：处理重载信号（Overloaded Signals）
 在 Qt 5 的相关 API 中，有些信号提供多个重载版本，例如 `QComboBox::currentIndexChanged` 曾同时提供索引与文本版本。旧语法通过字符串参数列表区分；新语法取得重载成员指针时，需要用 `QOverload` 或 `static_cast` 指定版本。Qt 6 的部分信号集合已经调整，迁移时应以目标版本头文件为准。
 
 **旧语法：**
@@ -1008,7 +1007,7 @@ connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &MainWindow::onIndexChanged);
 ```
 
-##### 示例 D：绑定到普通全局函数或静态函数
+#### 示例 D：绑定到普通全局函数或静态函数
 新语法不仅能绑定类的成员函数，还能绑定普通的 C++ 函数。
 
 ```cpp
@@ -1022,7 +1021,7 @@ connect(m_searchBox, &QLineEdit::textChanged, myGlobalLogger);
 
 ---
 
-#### 为什么强烈推荐使用新语法？
+### 为什么强烈推荐使用新语法？
 1. **编译期检查（最重要）：**
     - 如果你把 `textChanged` 拼错成了 `textChange`，旧语法在编译时**完全不会报错**，只会在运行时在控制台输出一行警告，导致功能失效。
     - 新语法会在**编译时直接报错**（`Error: textChange is not a member of QLineEdit`），让你立刻发现拼写错误。
