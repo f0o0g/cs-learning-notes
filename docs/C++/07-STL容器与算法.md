@@ -563,7 +563,7 @@ int main() {
 | :--- | :--- | :--- | :--- |
 | **本质** | 代码区的一段机器码地址 | 重载了 `operator()` 的**类对象** | 编译器自动生成的**匿名仿函数类对象**（闭包） |
 | **状态保持** | ❌ 否（除非用 static/全局） | ✅ 是（通过成员变量） | ✅ 是（通过捕获列表 Capture List） |
-| **内联优化** | ❌ 极难（间接寻址导致无法内联） | ✅ 极易（类型确定，编译器直接内联） | ✅ 极易（本质是仿函数，完美内联） |
+| **内联优化** | △ 通常更难（间接调用；全程序优化下可能被去间接化） | ✅ 极易（类型确定，编译器直接内联） | ✅ 极易（本质是仿函数，完美内联） |
 | **代码简洁度** | 中（需单独定义函数） | 低（需定义完整的类结构） | **极高**（就地定义，语法糖） |
 | **后端选型建议** | 仅用于 C 风格 API 回调（如 pthread、epoll） | 适合复杂状态机、需要复用且逻辑较重的策略类 | **日常开发首选**，配合 STL 算法极其优雅 |
 
@@ -628,9 +628,316 @@ int main() {
 
 ---
 
+## 7.12 Lambda 表达式
+**Lambda 表达式**（C++11）：就地定义一个匿名函数对象，并把所在作用域的变量「捕获」进这个对象的语法。
+
+### 7.12.1 从仿函数到就地闭包
+需求很简单：把一组整数按降序排序。三种写法对比如下。
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <algorithm>
+using namespace std;
+
+// 写法一：命名函数（或函数指针）—— 逻辑被迫离开调用点
+bool Desc(int a, int b) { return a > b; }
+
+// 写法二：仿函数 —— 要多写一个完整的类
+class DescCmp {
+public:
+    bool operator()(int a, int b) const { return a > b; }
+};
+
+int main()
+{
+    vector<int> v = {3, 1, 4, 1, 5, 9};
+
+    sort(v.begin(), v.end(), Desc);         // 函数指针
+    sort(v.begin(), v.end(), DescCmp{});    // 仿函数对象
+
+    // 写法三：Lambda —— 就地定义，不引入任何新名字
+    sort(v.begin(), v.end(), [](int a, int b) { return a > b; });
+
+    for (int x : v) cout << x << ' ';       // 9 5 4 3 1 1
+    return 0;
+}
+```
+
+三者语义上是同一件事：`sort` 只要求「能像函数一样被 `()` 调用」。Lambda 只是把「定义类 + 重载 `operator()` + 构造对象」这一整套动作压缩成了一行表达式。
+
+#### （1）语法骨架
+```cpp
+[capture](params) opt -> ret { body };
+```
+
+| 段 | 名称 | 作用 | 能否省略 |
+| :--- | :--- | :--- | :--- |
+| `[capture]` | 捕获列表 | 决定闭包对象里装哪些外部变量、按值还是按引用 | 不能省，但可以写空 `[]` |
+| `(params)` | 参数列表 | 与普通函数的参数列表完全一致 | 无参时可整段省略 |
+| `opt` | 函数选项 | `mutable`、`noexcept` 等 | 可省 |
+| `-> ret` | 返回类型 | 显式指定返回值（追踪返回类型语法） | 可省，由 `return` 推导 |
+| `{ body }` | 函数体 | 函数的具体实现 | 不能省，但可以为空 |
+
+```cpp
+auto f1 = []() { return 1; };   // 没有参数，参数列表写成空 ()
+auto f2 = [] { return 1; };     // 没有参数，参数列表整体省略
+auto f3 = [] {};                // 函数体可以为空，但花括号必须存在
+```
+
+![Lambda 表达式五段解剖：捕获、参数、选项、返回与函数体](imgs/cpp-learning/15-lambda-anatomy.png)
+
+*图：捕获列表决定闭包对象里存什么；参数与返回类型与普通函数同构；函数体是唯一不能省、但可以为空的一段。*
+
+### 7.12.2 捕获列表：六种写法
+「捕获」决定闭包对象与外部作用域的关系：**按值捕获是复制一份装进对象，按引用捕获是记住那个变量的地址**。
+
+| 写法 | 含义 | 可否读写 | 典型用途 |
+| :--- | :--- | :--- | :--- |
+| `[]` | 不捕获任何外部变量 | —— | 纯计算；需要转成函数指针时 |
+| `[=]` | 按值捕获体内用到的所有变量 | 只读（改的是副本，且需 `mutable`） | 短期回调、异步任务，避开悬空 |
+| `[&]` | 按引用捕获体内用到的所有变量 | 可读写，直接作用于原变量 | 就地使用的算法谓词 |
+| `[a, &b]` | 按值捕获 `a`，按引用捕获 `b` | `a` 只读，`b` 可读写 | 明确区分「要副本」与「要同一个」 |
+| `[=, &b]` | 其余按值，唯独 `b` 按引用 | `b` 可读写 | 大部分按值、个别结果要带出来 |
+| `[this]` | 捕获当前对象的 `this` 指针 | 可改真实成员 | 成员函数内的回调 |
+| `[*this]`（C++17） | 按值拷贝整个当前对象 | 改的是副本 | 对象可能先销毁的异步回调 |
+
+```cpp
+#include <iostream>
+using namespace std;
+
+int main()
+{
+    int a = 10, b = 20;
+
+    auto f1 = [] { return a; };               // error：没捕获，看不见 a
+    auto f2 = [&] { return a++; };            // ok：引用捕获，可读可写
+    auto f3 = [=] { return a; };              // ok：按值捕获，只读
+    auto f4 = [=] { return a++; };            // error：按值捕获的副本是只读的
+    auto f5 = [a] { return a + b; };          // error：只捕获了 a，看不见 b
+    auto f6 = [a, &b] { return a + (b++); };  // ok：a 只读，b 可写
+    auto f7 = [=, &b] { return a + (b++); };  // ok：其余只读，b 可写
+
+    return 0;
+}
+```
+
+> **易错点**：`[=]` 捕获的并不是「所有变量」，而是「lambda 体内实际用到的那几个」；没用到的变量不会进闭包对象，`[&]` 同理。
+
+成员函数内的情形（`[this]` 与 `[=]` 的差别）：
+
+```cpp
+class Test
+{
+public:
+    void Output(int x, int y)
+    {
+        auto c1 = [] { return m_number; };               // error：没有捕获 this
+        auto c2 = [this] { return m_number; };           // ok：经 this 访问成员
+        auto c3 = [this] { return m_number + x; };       // error：x 没有被捕获
+        auto c4 = [this, x] { return m_number + x; };    // ok
+        auto c5 = [this] { return ++m_number; };         // ok：改的是真实成员
+        auto c6 = [=] { return m_number + x + y; };      // ok：隐式捕获 this、x、y
+    }
+    int m_number = 100;
+};
+```
+
+![闭包对象解剖：按值捕获存副本，按引用捕获只存地址](imgs/cpp-learning/16-lambda-closure-capture.png)
+
+*图：按值捕获在闭包对象里放一份独立副本；按引用捕获只记住地址，因此被引用变量的生命周期必须覆盖 lambda 的整个使用期。*
+
+### 7.12.3 `mutable` 与返回值推导
+#### （1）为什么按值捕获的副本是只读的
+Lambda 类型在标准中就是「编译器生成的、带 `operator()` 的类」，而这个 `operator()` **默认是 const 的**；const 成员函数改不了成员变量，而按值捕获的副本恰好就是闭包对象的成员。
+
+`mutable` 的作用就是去掉 `operator()` 的 const：
+
+```cpp
+int a = 0;
+auto f1 = [=] { return a++; };             // error：副本只读
+auto f2 = [=]() mutable { return a++; };   // ok：改的是闭包里的副本
+```
+
++ 加了 `mutable`，即使没有参数也必须写 `()`，否则选项无处安放
++ `f2` 执行后外面的 `a` 仍然是 0：改的是副本，不是外部变量
+
+#### （2）返回类型
+返回类型明显时可省，编译器按 `return` 语句推导：
+
+```cpp
+auto f1 = [](int a) -> int { return a + 10; };  // 完整写法：追踪返回类型
+auto f2 = [](int a) { return a + 10; };         // 省略：推导为 int
+```
+
+有两条边界必须记住：
+
+```cpp
+auto f1 = [](int i) { return i; };     // ok：推导为 int
+auto f2 = [] { return {1, 2}; };       // error：返回类型不能由列表初始化推导
+auto f3 = [](bool ok) { if (ok) return 1; return 2.5; };  // error：多个 return 类型不一致
+```
+需要返回花括号列表、或多个分支类型不一致时，显式写 `-> std::vector<int>`、`-> double`。
+
+### 7.12.4 本质：编译器生成的闭包类
+```cpp
+int a = 10;
+int b = 20;
+auto f = [a, &b](int x) { return x + a + b; };
+```
+
+编译器大致会生成下面这个类（类名是实现细节，各编译器不同）：
+
+```cpp
+class __Lambda_7_12
+{
+public:
+    __Lambda_7_12(int a_, int& b_) : a_member(a_), b_member(b_) {}
+
+    int operator()(int x) const   // 默认 const！
+    {
+        return x + a_member + b_member;
+    }
+
+private:
+    int  a_member;   // [a]  ：独立副本
+    int& b_member;   // [&b] ：引用成员，本质是地址
+};
+
+__Lambda_7_12 f(a, b);   // auto f = ... 得到一个对象
+f(1);                    // 展开为 f.operator()(1)
+```
+
+> 7.11.5 已给出无捕获 lambda 的展开形式，可对照阅读：Lambda 表达式就是「写仿函数」的语法糖。
+
+三条结论：
+
++ **lambda 对象 = 闭包（closure）**：`auto f = ...` 拿到的是一个对象，可以按值/按引用传递、放进容器、作为成员保存
++ **捕获即成员**：按值捕获生成成员副本，按引用捕获生成引用成员——生命周期风险也随之从「变量」转移到「这个引用成员」
++ **调用即 `operator()`**：`f(3)` 等价于 `f.operator()(3)`，因此模板实例化后能inline展开，性能与手写仿函数一致
+
+#### （1）无捕获 lambda → 函数指针
+仅当捕获列表为空时，lambda 才能隐式转换成同签名的函数指针；一旦带上捕获，闭包对象里有状态，标准就不再提供这个转换：
+
+```cpp
+using FuncPtr = int (*)(int);
+
+FuncPtr p1 = [](int a) { return a; };        // ok：捕获为空，可转为函数指针
+int k = 1;
+FuncPtr p2 = [k](int a) { return a + k; };   // error：有捕获，不能转
+```
+这条规则正是第九章 `CreateThread` 这类 C 风格回调能用 lambda 的前提。
+
+#### （2）`std::function`：给 lambda 一个「类型名字」
+每个 lambda 的闭包类型都是独一无二的匿名类型，无法写出类型名。需要保存、当参数或放进容器时，用 `std::function` 做类型擦除：
+
+```cpp
+#include <functional>
+
+std::function<int(int)> f1 = [](int a) { return a; };  // 直接包装
+std::function<int(int)> f2 = std::bind([](int a) { return a; }, std::placeholders::_1);
+```
+代价是内部要经过一次间接调用，通常无法像直接调用闭包对象那样被内联。因此能用 `auto` 或模板参数推导时优先用它们，只在确实需要统一类型（回调表、类成员）时才用 `std::function`。
+
+### 7.12.5 与 STL 算法配合
+```cpp
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <numeric>
+using namespace std;
+
+int main()
+{
+    vector<int> v = {3, 1, 4, 1, 5, 9, 2, 6};
+    int threshold = 4;   // 谓词要「带着外部参数」参与比较，正是 lambda 的主场
+
+    sort(v.begin(), v.end(), [](int a, int b) { return a > b; });              // 降序
+    auto it = find_if(v.begin(), v.end(), [threshold](int x) { return x < threshold; });
+    int cnt = count_if(v.begin(), v.end(), [](int x) { return x % 2 == 0; });  // 偶数个数
+    for_each(v.begin(), v.end(), [](int x) { cout << x << ' '; });             // 就地打印
+    int sq = accumulate(v.begin(), v.end(), 0,
+                        [](int acc, int x) { return acc + x * x; });           // 平方和
+
+    // 容器/适配器的自定义规则：比较器本身就是一个闭包对象
+    auto cmp = [](int a, int b) { return a > b; };
+    priority_queue<int, vector<int>, decltype(cmp)> minHeap(cmp);  // 传入 greater 语义 → 小顶堆
+    for (int x : v) minHeap.push(x);
+
+    cout << "\ncnt=" << cnt << " sq=" << sq << " top=" << minHeap.top() << endl;
+    return 0;
+}
+```
+
+#### （1）C++14：泛型 lambda 与初始化捕获
+```cpp
+// 泛型 lambda：参数写 auto，相当于 operator() 变成成员函数模板
+auto twice = [](auto&& x) { return x * 2; };
+cout << twice(5) << ' ' << twice(2.5) << endl;   // 10 5
+
+// 初始化捕获：在捕获列表里定义新变量，可以 move 进闭包
+auto ptr = std::make_unique<int>(7);
+auto take = [p = std::move(ptr)] { return *p; };  // ptr 已被移走（C++14 起）
+```
+
+#### （2）C++17：`constexpr` lambda 与 `[*this]`
+```cpp
+constexpr auto sq = [](int x) { return x * x; };
+static_assert(sq(5) == 25);   // 捕获为空的 lambda 可在编译期求值
+
+struct Config
+{
+    int level = 3;
+    auto MakeTask()
+    {
+        return [*this] { return level; };   // 拷贝整个对象，不再依赖 this 存活
+    }
+};
+```
+
+更细的版本演进见 [现代C++/C++11学习文档.md](现代C++/C++11学习文档.md) 的 §2.4、[C++14学习文档.md](现代C++/C++14学习文档.md) 的 §4.1 与 §4.2、[C++17学习文档.md](现代C++/C++17学习文档.md) 的 §7.2 与 §7.3。
+
+### 7.12.6 常见坑与边界
+#### （1）悬空引用：最危险的一条
+```cpp
+auto MakeCounter()
+{
+    int count = 0;
+    return [&] { return ++count; };   // 危险：返回后 count 已销毁
+}
+// MakeCounter()() 是未定义行为
+```
+正确写法是按值捕获（副本随闭包对象存活）：`[count]() mutable { return ++count; }`。把这样的闭包交给线程或异步任务，问题会以更难排查的形式出现，见第九章 9.4.4。
+
+#### （2）`[=]` 里的 `this`
+C++17 之前，`[=]` 捕获的 `this` 是**指针**：对象一旦销毁，闭包里的 `this` 就悬空。C++17 起用 `[*this]` 拷贝整个对象来规避。
+
+#### （3）循环变量按引用捕获
+```cpp
+std::vector<std::function<void()>> tasks;
+for (int i = 0; i < 3; ++i)
+    tasks.push_back([&i] { cout << i; });   // 全部输出同一个值，且 i 已销毁
+```
+应改为按值捕获 `[i]`，或初始化捕获 `[v = i]`。
+
+#### （4）`mutable` 不等于改外部
+```cpp
+int n = 0;
+auto f = [n]() mutable { return ++n; };
+f(); f();
+cout << n;    // 仍然是 0；要影响外部请按引用捕获
+```
+
+#### （5）lambda 不能直接递归
+闭包类型在定义完成之前是未知的，函数体里无法按名字调用自己。需要 `std::function<void(int)>` 先声明再赋值，或使用泛型 lambda 把自身作为参数传入。
+
+#### （6）捕获解决不了线程安全
+lambda 捕获的变量若被多线程共享，按值捕获只是复制了「启动那一刻」的值；真正共享的状态仍要用 `std::atomic`、互斥量保护（第九章 9.6）。
+
 ---
 
-## 7.12 动态数组的实现原理（`vector`）
+## 7.13 动态数组的实现原理（`vector`）
 以下是一个简化的动态数组实现，展示了 `vector` 的核心机制：扩容。  
 _注：真实的 STL `vector` 并非直接使用 `new/delete`，而是通过*__空间配置器（Allocator）_ 进行内存池管理，以减少内存碎片并提升分配效率。*
 
@@ -666,8 +973,8 @@ public:
 
 **细节剖析**：`new int[len]()` 中的 `()` 表示**值初始化**，对 `int` 数组会得到全 0。若写成 `new int[len]`，元素为默认初始化的 `int`，其值不确定；读取这些未初始化值会导致未定义行为，与 Debug/Release 构建模式无关。
 
-## 7.13 总结
-### 7.13.1 STL 容器结构与特性对比
+## 7.14 总结
+### 7.14.1 STL 容器结构与特性对比
 此表是面试中“手撕底层原理”和“性能分析”的基石，请务必熟记各容器的**时间复杂度**与**内存模型**。
 
 | 容器名称 | 底层数据结构 | 内存连续性 | 随机访问 (`[]`) | 头部插/删 | 尾部插/删 | 中间插/删 | 迭代器类型 | CPU Cache 友好度 |
@@ -689,7 +996,7 @@ public:
 
 ---
 
-### 7.13.2 序列容器常用 API
+### 7.14.2 序列容器常用 API
 序列容器关注元素的排列顺序和位置操作。
 
 | 操作分类 | API 函数 | `vector` | `deque` | `list` | `forward_list` | `array` |
@@ -718,7 +1025,7 @@ public:
 
 ---
 
-### 7.13.3 关联容器常用 API
+### 7.14.3 关联容器常用 API
 关联容器关注键值（Key）的查找、排序与去重。
 
 | 操作分类 | API 函数 | `map` / `set` (红黑树) | `unordered_map` / `unordered_set` (哈希表) |
@@ -750,7 +1057,7 @@ public:
 
 ---
 
-### 7.13.4 迭代器失效条件
+### 7.14.4 迭代器失效条件
 这是 C++ 面试中**出现频率最高**的 STL 考点，主要考察对底层内存搬移和节点指针变化的理解。
 
 | 容器类型 | 插入操作 (Insert / Push) 导致的失效 | 删除操作 (Erase / Pop) 导致的失效 |
@@ -783,7 +1090,7 @@ std::erase(vec, target);
 
 ---
 
-### 7.13.5 容器选型
+### 7.14.5 容器选型
 在实际编写网络库、RPC 框架或业务逻辑时，请按照以下逻辑树选择容器：
 
 | 业务场景需求 | 推荐容器 | 核心理由 (后端视角) |
