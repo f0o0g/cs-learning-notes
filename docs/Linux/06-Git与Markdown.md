@@ -1,11 +1,3 @@
----
-title: "Linux 学习手册 · 06 ｜ Git 与 Markdown"
----
-
-> 篇目：进阶篇 · 原《Linux 高阶》01 分册，第 1—6 章（含附录） ｜ 返回 [索引](linux.md)
-
-> 本文档整理 Git / GitHub 的操作方法与 Markdown 语法，按知识主线组织编写，持续补充。
-
 # 第 1 章 Git 与 GitHub 起步
 
 ## 1.1 版本管理与 GitHub 是什么
